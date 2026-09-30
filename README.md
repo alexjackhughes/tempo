@@ -8,6 +8,8 @@ A private, local-only time tracker and pomodoro timer that lives in the macOS me
 - Pomodoro sessions are scored by what you actually did during them.
 - Data: `~/Library/Application Support/Tempo/` (plain JSON, one activity file per day).
 
+Design: Geist Sans/Mono (bundled from the `geist` npm package, SIL OFL — see `Resources/Fonts/OFL.txt`), monochrome surfaces with hairline borders, light + dark.
+
 ## Build & install
 
     ./scripts/build-app.sh --install

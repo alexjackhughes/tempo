@@ -10,6 +10,7 @@ swift build -c release
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp .build/release/Tempo "$APP/Contents/MacOS/Tempo"
+cp -R Resources/Fonts "$APP/Contents/Resources/Fonts"
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

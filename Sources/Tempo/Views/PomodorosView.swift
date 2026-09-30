@@ -3,76 +3,117 @@ import SwiftUI
 
 struct PomodorosView: View {
     @Environment(AppModel.self) private var model
+    @State private var filter: Filter = .all
+
+    enum Filter: Hashable { case all, completed, stopped }
 
     var body: some View {
         let store = model.store
-        let sessions = store.sessions.sorted { $0.start > $1.start }
-        let completed = sessions.filter(\.completed)
+        let all = store.sessions.sorted { $0.start > $1.start }
+        let completed = all.filter(\.completed)
         let scores = completed.compactMap { store.score(for: $0) }
+        let avg = scores.isEmpty ? nil : scores.reduce(0, +) / Double(scores.count)
         let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: .now)!
         let thisWeek = completed.filter { $0.start >= weekAgo }.count
-        let completionRate = sessions.isEmpty ? nil : Double(completed.count) / Double(sessions.count) * 100
+        let completionRate = all.isEmpty ? nil : Double(completed.count) / Double(all.count) * 100
         let byHour = hourlyScores(completed)
         let best = byHour.filter { $0.count >= 2 }.max { $0.score < $1.score }
-        let grouped = Dictionary(grouping: sessions) { Calendar.current.startOfDay(for: $0.start) }
+        let focused = completed.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) }
+
+        let visible = all.filter {
+            switch filter {
+            case .all: true
+            case .completed: $0.completed
+            case .stopped: !$0.completed
+            }
+        }
+        let grouped = Dictionary(grouping: visible) { Calendar.current.startOfDay(for: $0.start) }
             .sorted { $0.key > $1.key }
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Pomodoros").font(.title2.bold())
-
-                HStack(spacing: 12) {
-                    StatCard(title: "Completed (all time)", value: "\(completed.count)",
-                             detail: "\(formatDuration(completed.reduce(0) { $0 + $1.end.timeIntervalSince($1.start) })) focused")
-                    StatCard(title: "Last 7 days", value: "\(thisWeek)",
-                             detail: "\(String(format: "%.1f", Double(thisWeek) / 7)) per day")
-                    StatCard(title: "Completion rate", value: completionRate.map { "\(Int($0.rounded()))%" } ?? "–",
-                             detail: "finished vs. stopped early")
-                    let avg = scores.isEmpty ? nil : scores.reduce(0, +) / Double(scores.count)
-                    StatCard(title: "Avg focus score", value: formatScore(avg),
-                             detail: best.map { "best around \($0.hour):00" } ?? "needs more sessions",
-                             tint: scoreColor(avg))
+        VStack(alignment: .leading, spacing: 24) {
+            PageHeader(title: "Focus", subtitle: "Every session, scored by what you actually did during it") {
+                Button {
+                    model.pomodoro.startFocus(task: "")
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "play.fill").font(.system(size: 9))
+                        Text("New session")
+                    }
                 }
+                .buttonStyle(.primary)
+                .disabled(model.pomodoro.phase != .idle)
+            }
 
-                if !byHour.isEmpty {
-                    Card(title: "Focus score by time of day") {
-                        Chart(byHour) { row in
-                            BarMark(x: .value("Hour", row.hour), y: .value("Score", row.score), width: .fixed(22))
-                                .foregroundStyle(scoreColor(row.score).gradient)
-                                .annotation(position: .top) {
-                                    Text("\(row.count)").font(.caption2).foregroundStyle(.secondary)
-                                }
-                        }
-                        .chartXScale(domain: 0...23)
-                        .chartYScale(domain: 0...100)
-                        .chartXAxis {
-                            AxisMarks(values: Array(stride(from: 0, through: 23, by: 3))) { value in
-                                AxisGridLine()
-                                AxisValueLabel { Text("\(value.as(Int.self) ?? 0):00") }
+            MetricStrip {
+                Metric(label: "Completed", value: "\(completed.count)", detail: "\(formatDuration(focused)) focused")
+                Metric(label: "Last 7 days", value: "\(thisWeek)",
+                       detail: String(format: "%.1f per day", Double(thisWeek) / 7))
+                Metric(label: "Completion rate", value: completionRate.map { "\(Int($0.rounded()))" } ?? "–",
+                       unit: completionRate == nil ? nil : "%", detail: "finished vs. stopped early")
+                Metric(label: "Avg focus score", value: formatScore(avg), unit: avg == nil ? nil : "/100",
+                       detail: best.map { "sharpest around \(String(format: "%02d:00", $0.hour))" } ?? "needs more sessions",
+                       dot: ScoreStatus(avg).color)
+            }
+
+            if !byHour.isEmpty {
+                Panel(title: "Focus by time of day", subtitle: "Average session score by start hour") {
+                    Chart(byHour) { row in
+                        BarMark(x: .value("Hour", row.hour), y: .value("Score", row.score), width: .fixed(16))
+                            .foregroundStyle(row.hour == best?.hour ? T.blue : T.fg3.opacity(0.45))
+                            .cornerRadius(2)
+                            .annotation(position: .top) {
+                                Text("\(row.count)").font(.mono(9)).foregroundStyle(T.fg3)
                             }
-                        }
-                        .frame(height: 160)
-                        Text("Numbers above bars are session counts. Right-click a session below to delete it.")
-                            .font(.caption).foregroundStyle(.secondary)
                     }
+                    .chartXScale(domain: -0.6...23.6)
+                    .chartYScale(domain: 0...100)
+                    .chartXAxis { hourAxis() }
+                    .chartYAxis { valueAxis([0, 50, 100]) }
+                    .frame(height: 160)
+                }
+            }
+
+            Panel(padded: false) {
+                HStack {
+                    Segmented(selection: $filter, options: [(.all, "All"), (.completed, "Completed"), (.stopped, "Stopped")],
+                              compact: true)
+                    Spacer()
+                    Text("\(visible.count) sessions").font(.mono(11)).foregroundStyle(T.fg3)
+                }
+                .padding(.horizontal, 16)
+                .frame(height: 52)
+
+                if visible.isEmpty {
+                    Hairline()
+                    EmptyState(icon: "timer", title: "No sessions yet",
+                               message: "Start one from the menu bar. Tempo scores each session from the apps and sites you used during it.")
                 }
 
-                if sessions.isEmpty {
-                    Card {
-                        Text("No pomodoros yet. Start one from the menu bar — Tempo will score how focused each session was based on the apps and sites you used during it.")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                ForEach(grouped, id: \.key) { day, daySessions in
-                    Card(title: day.formatted(.dateTime.weekday(.wide).day().month(.wide))) {
-                        VStack(spacing: 8) {
-                            ForEach(daySessions) { SessionRow(session: $0, showDate: false) }
+                ForEach(grouped, id: \.key) { day, sessions in
+                    let dayScores = sessions.filter(\.completed).compactMap { store.score(for: $0) }
+                    HStack {
+                        Text(day.formatted(.dateTime.weekday(.abbreviated).day().month(.abbreviated)).uppercased())
+                            .font(.mono(11, .medium)).foregroundStyle(T.fg2)
+                        Spacer()
+                        Text("\(sessions.filter(\.completed).count) done")
+                        if !dayScores.isEmpty {
+                            Text("·")
+                            Text("avg \(Int((dayScores.reduce(0, +) / Double(dayScores.count)).rounded()))")
                         }
+                    }
+                    .font(.mono(11)).foregroundStyle(T.fg3)
+                    .padding(.horizontal, 20)
+                    .frame(height: 32)
+                    .background(T.subtle)
+                    .overlay(alignment: .top) { Hairline() }
+                    .overlay(alignment: .bottom) { Hairline() }
+
+                    ForEach(sessions) { session in
+                        SessionRow(session: session)
+                        if session.id != sessions.last?.id { Hairline() }
                     }
                 }
             }
-            .padding(24)
         }
     }
 

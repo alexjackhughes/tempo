@@ -54,7 +54,12 @@ final class Store {
         decoder.dateDecodingStrategy = .secondsSince1970
         let loadedConfig = (try? Data(contentsOf: self.directory.appendingPathComponent("config.json")))
             .flatMap { try? decoder.decode(Config.self, from: $0) }
-        let config = loadedConfig ?? Config.defaults()
+        var config = loadedConfig ?? Config.defaults()
+        for i in config.categories.indices {
+            if let mapped = Config.legacyPalette[config.categories[i].colorHex.uppercased()] {
+                config.categories[i].colorHex = mapped
+            }
+        }
         self.config = config
         savedConfig = loadedConfig ?? config
         cachedCategorizer = Categorizer(config: config)

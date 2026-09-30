@@ -30,13 +30,6 @@ enum Productivity: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    var color: Color {
-        switch self {
-        case .productive: Color(hex: "#34C759")
-        case .neutral: Color(hex: "#8E8E93")
-        case .distracting: Color(hex: "#FF3B30")
-        }
-    }
 }
 
 struct Category: Codable, Identifiable, Hashable {
@@ -106,8 +99,15 @@ struct ItemKey: Hashable {
 
 extension Config {
     static let palette = [
-        "#0A84FF", "#30B0C7", "#34C759", "#5856D6", "#AF52DE",
-        "#FF2D55", "#FF3B30", "#FF9500", "#FFCC00", "#A2845E", "#8E8E93",
+        "#0070F3", "#12A594", "#30A46C", "#6E56CF", "#8E4EC6",
+        "#E93D82", "#E5484D", "#F76B15", "#FFB224", "#AD7F58", "#8F8F8F",
+    ]
+
+    /// Maps the original system-style colours onto the Geist palette.
+    static let legacyPalette: [String: String] = [
+        "#0A84FF": "#0070F3", "#30B0C7": "#12A594", "#34C759": "#30A46C", "#5856D6": "#6E56CF",
+        "#AF52DE": "#8E4EC6", "#FF2D55": "#E93D82", "#FF3B30": "#E5484D", "#FF9500": "#F76B15",
+        "#FFCC00": "#FFB224", "#A2845E": "#AD7F58", "#8E8E93": "#8F8F8F",
     ]
 
     static func defaults() -> Config {
@@ -121,34 +121,34 @@ extension Config {
             rules += domains.map { Rule(kind: .domain, pattern: $0.lowercased(), categoryID: category.id) }
         }
 
-        add("Development", "#0A84FF", .productive,
+        add("Development", "#0070F3", .productive,
             apps: ["Xcode", "Code", "Cursor", "Zed", "Terminal", "iTerm2", "Warp", "Ghostty", "Claude",
                    "Simulator", "Docker Desktop", "TablePlus", "Postman", "GitHub Desktop", "Tower"],
             domains: ["github.com", "gitlab.com", "stackoverflow.com", "vercel.com", "localhost", "127.0.0.1",
                       "developer.apple.com", "developer.mozilla.org", "claude.ai", "chatgpt.com",
                       "npmjs.com", "supabase.com", "console.anthropic.com"])
-        add("Work & Docs", "#30B0C7", .productive,
+        add("Work & Docs", "#12A594", .productive,
             apps: ["Notion", "Linear", "Figma", "Obsidian", "Notes", "Pages", "Numbers", "Keynote",
                    "Microsoft Word", "Microsoft Excel", "Microsoft PowerPoint", "Preview", "Things", "Craft"],
             domains: ["docs.google.com", "drive.google.com", "notion.so", "linear.app", "figma.com",
                       "miro.com", "airtable.com", "trello.com", "asana.com", "atlassian.net"])
-        add("Communication", "#5856D6", .neutral,
+        add("Communication", "#6E56CF", .neutral,
             apps: ["Slack", "Mail", "Messages", "zoom.us", "Discord", "Microsoft Teams", "WhatsApp",
                    "Telegram", "Signal", "FaceTime", "Calendar", "Superhuman", "Spark"],
             domains: ["mail.google.com", "calendar.google.com", "meet.google.com", "outlook.live.com",
                       "outlook.office.com", "app.slack.com", "web.whatsapp.com", "zoom.us"])
-        add("Social Media", "#FF2D55", .distracting,
+        add("Social Media", "#E93D82", .distracting,
             apps: [],
             domains: ["x.com", "twitter.com", "facebook.com", "instagram.com", "reddit.com", "linkedin.com",
                       "tiktok.com", "threads.net", "bsky.app", "news.ycombinator.com", "pinterest.com"])
-        add("Entertainment", "#FF3B30", .distracting,
+        add("Entertainment", "#E5484D", .distracting,
             apps: ["Spotify", "Music", "TV", "Podcasts", "Steam", "Netflix"],
             domains: ["youtube.com", "netflix.com", "twitch.tv", "primevideo.com", "disneyplus.com",
                       "open.spotify.com", "bbc.co.uk", "theguardian.com", "nytimes.com", "cnn.com"])
-        add("Shopping", "#FF9500", .distracting,
+        add("Shopping", "#F76B15", .distracting,
             apps: [],
             domains: ["amazon.com", "amazon.co.uk", "ebay.com", "ebay.co.uk", "etsy.com", "asos.com"])
-        add("Utilities", "#8E8E93", .neutral,
+        add("Utilities", "#8F8F8F", .neutral,
             apps: ["Finder", "System Settings", "1Password", "Activity Monitor", "App Store", "Raycast"],
             domains: [])
 
@@ -188,9 +188,3 @@ func formatScore(_ score: Double?) -> String {
     score.map { "\(Int($0.rounded()))" } ?? "–"
 }
 
-func scoreColor(_ score: Double?) -> Color {
-    guard let score else { return .secondary }
-    if score >= 70 { return Productivity.productive.color }
-    if score >= 45 { return .orange }
-    return Productivity.distracting.color
-}

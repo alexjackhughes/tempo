@@ -48,7 +48,7 @@ struct CategoryTotal: Identifiable {
 
     var id: String { category?.id.uuidString ?? "uncategorized" }
     var name: String { category?.name ?? "Uncategorized" }
-    var color: Color { category?.color ?? Color.gray.opacity(0.45) }
+    var color: Color { category?.color ?? T.fg3.opacity(0.5) }
     var productivity: Productivity { category?.productivity ?? .neutral }
 }
 

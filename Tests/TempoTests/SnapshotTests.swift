@@ -15,12 +15,31 @@ final class SnapshotTests: XCTestCase {
         let store = Store(directory: dir)
         seed(store)
         let model = AppModel(store: store)
+        Fonts.register()
 
-        render(MenuBarView().environment(model), size: CGSize(width: 320, height: 520), to: "\(out)/menubar.png")
-        render(DayView().environment(model), size: CGSize(width: 1000, height: 1300), to: "\(out)/day.png")
-        render(TrendsView().environment(model), size: CGSize(width: 1000, height: 1400), to: "\(out)/trends.png")
-        render(PomodorosView().environment(model), size: CGSize(width: 1000, height: 900), to: "\(out)/pomodoros.png")
-        render(CategoriesView().environment(model), size: CGSize(width: 1000, height: 900), to: "\(out)/categories.png")
+        for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            render(MenuBarView().environment(model), size: CGSize(width: 340, height: 600),
+                   appearance: appearance, to: "\(out)/menubar-\(suffix).png")
+            render(page(DayView(), model), size: CGSize(width: 1180, height: 1650),
+                   appearance: appearance, to: "\(out)/overview-\(suffix).png")
+            render(page(TrendsView(), model), size: CGSize(width: 1180, height: 1000),
+                   appearance: appearance, to: "\(out)/trends-\(suffix).png")
+        }
+        render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),
+               appearance: .darkAqua, to: "\(out)/focus-dark.png")
+        render(page(CategoriesView(), model), size: CGSize(width: 1180, height: 1400),
+               appearance: .aqua, to: "\(out)/categories-light.png")
+        render(page(SettingsView(), model), size: CGSize(width: 1180, height: 1500),
+               appearance: .aqua, to: "\(out)/settings-light.png")
+    }
+
+    private func page<V: View>(_ content: V, _ model: AppModel) -> some View {
+        content
+            .frame(maxWidth: 1120)
+            .padding(32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .background(T.bg)
+            .environment(model)
     }
 
     private func seed(_ store: Store) {
@@ -63,12 +82,12 @@ final class SnapshotTests: XCTestCase {
     }
 
     @MainActor
-    private func render<V: View>(_ view: V, size: CGSize, to path: String) {
+    private func render<V: View>(_ view: V, size: CGSize, appearance: NSAppearance.Name, to path: String) {
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
         host.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
         window.contentView = host
-        window.appearance = NSAppearance(named: .aqua)
+        window.appearance = NSAppearance(named: appearance)
         host.layoutSubtreeIfNeeded()
         RunLoop.main.run(until: Date().addingTimeInterval(0.5))
         let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds)!

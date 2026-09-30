@@ -27,6 +27,10 @@ final class AppModel {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        Fonts.register()
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         if Notifier.available { UNUserNotificationCenter.current().delegate = self }

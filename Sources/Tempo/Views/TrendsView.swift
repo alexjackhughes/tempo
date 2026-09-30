@@ -4,147 +4,193 @@ import SwiftUI
 struct TrendsView: View {
     @Environment(AppModel.self) private var model
     @State private var range = 14
+    @State private var metric: TrendMetric = .score
 
     var body: some View {
         let store = model.store
         let stats = store.dayStats(days: range)
         let previous = store.dayStats(
-            days: range,
-            endingOn: Calendar.current.date(byAdding: .day, value: -range, to: .now)!)
+            days: range, endingOn: Calendar.current.date(byAdding: .day, value: -range, to: .now)!)
         let current = PeriodTotals(stats)
         let prior = PeriodTotals(previous)
+        let periodSummary = store.summary(in: DateInterval(start: stats.first?.date ?? .now, end: .now))
 
-        let hourRows = stats.flatMap { stat in
-            Productivity.allCases.map { p in
-                HoursRow(date: stat.date, productivity: p, hours: stat.summary.seconds(p) / 3600)
+        VStack(alignment: .leading, spacing: 24) {
+            PageHeader(title: "Trends", subtitle: "How your focus is changing over time") {
+                Segmented(selection: $range, options: [(7, "7d"), (14, "14d"), (30, "30d"), (90, "90d")])
             }
-        }
-        let scored = stats.filter { $0.summary.score != nil }
-        let pomodoroScored = stats.filter { $0.pomodoroScore != nil }
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Trends").font(.title2.bold())
-                    Spacer()
-                    Picker("", selection: $range) {
-                        Text("7 days").tag(7)
-                        Text("14 days").tag(14)
-                        Text("30 days").tag(30)
-                        Text("90 days").tag(90)
+            // Metric tabs + chart
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    ForEach(TrendMetric.allCases) { m in
+                        if m != TrendMetric.allCases.first { Hairline(vertical: true) }
+                        MetricTab(metric: m, selected: metric == m, current: current, prior: prior) {
+                            withAnimation(.easeOut(duration: 0.2)) { metric = m }
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .frame(width: 320)
                 }
+                .fixedSize(horizontal: false, vertical: true)
+                Hairline()
+                TrendChart(metric: metric, stats: stats, range: range, goal: store.config.dailyPomodoroGoal,
+                           average: current.value(metric))
+                    .frame(height: 260)
+                    .padding(20)
+            }
+            .background(T.surface)
+            .clipShape(RoundedRectangle(cornerRadius: T.radius))
+            .overlay(RoundedRectangle(cornerRadius: T.radius).strokeBorder(T.border))
 
-                HStack(spacing: 12) {
-                    StatCard(title: "Avg productivity score", value: formatScore(current.avgScore),
-                             detail: delta(current.avgScore, prior.avgScore, unit: " pts"),
-                             tint: scoreColor(current.avgScore))
-                    StatCard(title: "Productive time / day", value: formatDuration(current.productivePerDay),
-                             detail: deltaDuration(current.productivePerDay, prior.productivePerDay))
-                    StatCard(title: "Pomodoros completed", value: "\(current.pomodoros)",
-                             detail: delta(Double(current.pomodoros), Double(prior.pomodoros), unit: ""))
-                    StatCard(title: "Avg pomodoro score", value: formatScore(current.avgPomodoroScore),
-                             detail: delta(current.avgPomodoroScore, prior.avgPomodoroScore, unit: " pts"),
-                             tint: scoreColor(current.avgPomodoroScore))
-                }
-
-                Card(title: "Hours per day") {
-                    Chart(hourRows) { row in
+            HStack(alignment: .top, spacing: 16) {
+                Panel(title: "Hours by type", subtitle: "Productive, neutral and distracting time per day") {
+                    ProductivityLegend()
+                } content: {
+                    let rows = stats.flatMap { stat in
+                        Productivity.allCases.map {
+                            HoursRow(date: stat.date, productivity: $0, hours: stat.summary.seconds($0) / 3600)
+                        }
+                    }
+                    Chart(rows) { row in
                         BarMark(x: .value("Day", row.date, unit: .day), y: .value("Hours", row.hours))
                             .foregroundStyle(by: .value("Type", row.productivity.label))
+                            .cornerRadius(2)
                     }
                     .chartForegroundStyleScale(domain: Productivity.allCases.map(\.label),
-                                               range: Productivity.allCases.map(\.color))
-                    .frame(height: 200)
+                                               range: Productivity.allCases.map(\.tint))
+                    .chartLegend(.hidden)
+                    .chartXAxis { dayAxis(range) }
+                    .chartYAxis { valueAxis(suffix: "h") }
+                    .frame(height: 220)
                 }
+                .frame(maxWidth: .infinity)
 
-                HStack(alignment: .top, spacing: 12) {
-                    Card(title: "Productivity score") {
-                        Chart {
-                            ForEach(scored) { stat in
-                                LineMark(x: .value("Day", stat.date, unit: .day),
-                                         y: .value("Score", stat.summary.score ?? 0))
-                                    .interpolationMethod(.monotone)
-                                PointMark(x: .value("Day", stat.date, unit: .day),
-                                          y: .value("Score", stat.summary.score ?? 0))
-                                    .foregroundStyle(scoreColor(stat.summary.score))
-                            }
-                            if let avg = current.avgScore {
-                                RuleMark(y: .value("Average", avg))
-                                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .chartYScale(domain: 0...100)
-                        .frame(height: 180)
-                    }
-                    Card(title: "Pomodoros") {
-                        Chart {
-                            ForEach(stats) { stat in
-                                BarMark(x: .value("Day", stat.date, unit: .day),
-                                        y: .value("Completed", stat.pomodorosCompleted))
-                                    .foregroundStyle(Color.accentColor.gradient)
-                            }
-                            RuleMark(y: .value("Goal", store.config.dailyPomodoroGoal))
-                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [4, 4]))
-                                .foregroundStyle(.secondary)
-                                .annotation(position: .top, alignment: .leading) {
-                                    Text("goal").font(.caption2).foregroundStyle(.secondary)
-                                }
-                        }
-                        .frame(height: 180)
-                    }
-                }
-
-                if !pomodoroScored.isEmpty {
-                    Card(title: "Pomodoro focus score") {
-                        Chart(pomodoroScored) { stat in
-                            LineMark(x: .value("Day", stat.date, unit: .day),
-                                     y: .value("Score", stat.pomodoroScore ?? 0))
-                                .interpolationMethod(.monotone)
-                            PointMark(x: .value("Day", stat.date, unit: .day),
-                                      y: .value("Score", stat.pomodoroScore ?? 0))
-                        }
-                        .chartYScale(domain: 0...100)
-                        .frame(height: 160)
-                    }
-                }
-
-                Card(title: "Where the time went") {
-                    let totals = store.summary(in: DateInterval(
-                        start: stats.first?.date ?? .now, end: .now)).categories
-                    if totals.isEmpty {
-                        EmptyHint()
+                Panel(title: "Top categories", subtitle: "Last \(range) days") {
+                    if periodSummary.categories.isEmpty {
+                        EmptyState(icon: "square.grid.2x2", title: "No data", message: "Nothing tracked in this period.")
                     } else {
-                        Chart(totals) { row in
-                            BarMark(x: .value("Hours", row.seconds / 3600), y: .value("Category", row.name))
-                                .foregroundStyle(row.color)
-                                .annotation(position: .trailing) {
-                                    Text(formatDuration(row.seconds)).font(.caption).foregroundStyle(.secondary)
-                                }
-                        }
-                        .chartXAxisLabel("hours")
-                        .frame(height: CGFloat(max(1, totals.count)) * 40 + 30)
+                        CategoryBreakdown(summary: periodSummary, limit: 7)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+            }
+        }
+    }
+}
+
+enum TrendMetric: String, CaseIterable, Identifiable {
+    case score = "Productivity score"
+    case productive = "Productive time"
+    case pomodoros = "Focus sessions"
+    case focus = "Session focus"
+
+    var id: String { rawValue }
+}
+
+private struct MetricTab: View {
+    let metric: TrendMetric
+    let selected: Bool
+    let current: PeriodTotals
+    let prior: PeriodTotals
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(metric.rawValue).font(.geist(13)).foregroundStyle(selected ? T.fg : T.fg2)
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(current.formatted(metric)).font(.geist(26, .semibold)).tracking(-0.9)
+                        .foregroundStyle(T.fg)
+                    Spacer(minLength: 0)
+                    if let delta = current.delta(metric, from: prior) {
+                        DeltaBadge(delta: delta.value, unit: delta.unit,
+                                   text: metric == .productive ? formatDuration(abs(delta.value) * 60) : nil)
                     }
                 }
             }
-            .padding(24)
+            .padding(20)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(selected ? T.subtle : hovering ? T.subtle.opacity(0.6) : .clear)
+            .overlay(alignment: .bottom) {
+                if selected { T.fg.frame(height: 2) }
+            }
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
     }
+}
 
-    private func delta(_ now: Double?, _ before: Double?, unit: String) -> String {
-        guard let now, let before else { return "no previous data" }
-        let d = now - before
-        let sign = d >= 0 ? "+" : "−"
-        return "\(sign)\(Int(abs(d).rounded()))\(unit) vs previous \(range) days"
-    }
+private struct TrendChart: View {
+    let metric: TrendMetric
+    let stats: [DayStat]
+    let range: Int
+    let goal: Int
+    let average: Double?
 
-    private func deltaDuration(_ now: TimeInterval, _ before: TimeInterval) -> String {
-        guard before > 0 else { return "no previous data" }
-        let d = now - before
-        return "\(d >= 0 ? "+" : "−")\(formatDuration(abs(d))) vs previous \(range) days"
+    var body: some View {
+        switch metric {
+        case .score, .focus:
+            let points = stats.compactMap { stat -> (Date, Double)? in
+                let value = metric == .score ? stat.summary.score : stat.pomodoroScore
+                return value.map { (stat.date, $0) }
+            }
+            if points.isEmpty {
+                EmptyState(icon: "chart.xyaxis.line", title: "Not enough data",
+                           message: "Scores appear once Tempo has tracked some time.")
+            } else {
+                Chart {
+                    ForEach(points, id: \.0) { date, value in
+                        AreaMark(x: .value("Day", date, unit: .day), y: .value("Score", value))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(LinearGradient(colors: [T.blue.opacity(0.22), T.blue.opacity(0)],
+                                                            startPoint: .top, endPoint: .bottom))
+                        LineMark(x: .value("Day", date, unit: .day), y: .value("Score", value))
+                            .interpolationMethod(.monotone)
+                            .foregroundStyle(T.blue)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                    }
+                    if let average {
+                        RuleMark(y: .value("Average", average))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                            .foregroundStyle(T.fg3)
+                            .annotation(position: .top, alignment: .trailing) {
+                                Text("avg \(Int(average.rounded()))").font(.mono(10)).foregroundStyle(T.fg3)
+                            }
+                    }
+                }
+                .chartYScale(domain: 0...100)
+                .chartXAxis { dayAxis(range) }
+                .chartYAxis { valueAxis([0, 25, 50, 75, 100]) }
+            }
+
+        case .productive:
+            Chart(stats) { stat in
+                BarMark(x: .value("Day", stat.date, unit: .day),
+                        y: .value("Hours", stat.summary.seconds(.productive) / 3600))
+                    .foregroundStyle(T.blue)
+                    .cornerRadius(3)
+            }
+            .chartXAxis { dayAxis(range) }
+            .chartYAxis { valueAxis(suffix: "h") }
+
+        case .pomodoros:
+            Chart {
+                ForEach(stats) { stat in
+                    BarMark(x: .value("Day", stat.date, unit: .day), y: .value("Sessions", stat.pomodorosCompleted))
+                        .foregroundStyle(stat.pomodorosCompleted >= goal ? T.fg : T.fg3.opacity(0.6))
+                        .cornerRadius(3)
+                }
+                RuleMark(y: .value("Goal", goal))
+                    .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 3]))
+                    .foregroundStyle(T.green)
+                    .annotation(position: .top, alignment: .trailing) {
+                        Text("goal \(goal)").font(.mono(10)).foregroundStyle(T.green)
+                    }
+            }
+            .chartXAxis { dayAxis(range) }
+            .chartYAxis { valueAxis() }
+        }
     }
 }
 
@@ -157,7 +203,7 @@ private struct HoursRow: Identifiable {
 
 private struct PeriodTotals {
     var avgScore: Double?
-    var productivePerDay: TimeInterval = 0
+    var productivePerDay: TimeInterval?
     var pomodoros = 0
     var avgPomodoroScore: Double?
 
@@ -173,11 +219,34 @@ private struct PeriodTotals {
         }
         pomodoros = stats.reduce(0) { $0 + $1.pomodorosCompleted }
         let scored = stats.filter { $0.pomodoroScore != nil }
-        if !scored.isEmpty {
-            // Weight each day's average by how many pomodoros it had.
-            let weight = scored.reduce(0) { $0 + $1.pomodorosCompleted }
+        let weight = scored.reduce(0) { $0 + $1.pomodorosCompleted }
+        if weight > 0 {
             avgPomodoroScore = scored.reduce(0.0) { $0 + ($1.pomodoroScore ?? 0) * Double($1.pomodorosCompleted) }
-                / Double(max(1, weight))
+                / Double(weight)
         }
+    }
+
+    func value(_ metric: TrendMetric) -> Double? {
+        switch metric {
+        case .score: avgScore
+        case .productive: productivePerDay
+        case .pomodoros: Double(pomodoros)
+        case .focus: avgPomodoroScore
+        }
+    }
+
+    func formatted(_ metric: TrendMetric) -> String {
+        switch metric {
+        case .score, .focus: formatScore(value(metric))
+        case .productive: productivePerDay.map { "\(formatDuration($0))/d" } ?? "–"
+        case .pomodoros: "\(pomodoros)"
+        }
+    }
+
+    func delta(_ metric: TrendMetric, from prior: PeriodTotals) -> (value: Double, unit: String)? {
+        guard let now = value(metric), let before = prior.value(metric) else { return nil }
+        if metric == .pomodoros, before == 0 { return nil }
+        if metric == .productive { return ((now - before) / 60, "m") }
+        return (now - before, "")
     }
 }

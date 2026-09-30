@@ -8,35 +8,40 @@ struct CategoriesView: View {
         let weekAgo = Calendar.current.date(byAdding: .day, value: -7, to: .now)!
         let recent = store.summary(in: DateInterval(start: weekAgo, end: .now))
         let uncategorized = recent.items.filter { $0.category == nil }
+        let uncategorizedTime = uncategorized.reduce(0) { $0 + $1.seconds }
 
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                HStack {
-                    Text("Categories").font(.title2.bold())
-                    Spacer()
-                    Button {
-                        let hex = Config.palette[store.config.categories.count % Config.palette.count]
-                        store.config.categories.append(
-                            Category(name: "New category", colorHex: hex, productivity: .neutral))
-                        store.saveConfigIfNeeded()
-                    } label: {
-                        Label("Add category", systemImage: "plus")
+        VStack(alignment: .leading, spacing: 24) {
+            PageHeader(title: "Categories",
+                       subtitle: "Rules map apps and websites to categories. Changes apply to all past data.") {
+                Button {
+                    let hex = Config.palette[store.config.categories.count % Config.palette.count]
+                    store.config.categories.append(Category(name: "New category", colorHex: hex, productivity: .neutral))
+                    store.saveConfigIfNeeded()
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                        Text("New category")
                     }
                 }
-                Text("Rules apply retroactively, so recategorizing something updates all past days and pomodoro scores.")
-                    .foregroundStyle(.secondary)
+                .buttonStyle(.secondary)
+            }
 
-                if !uncategorized.isEmpty {
-                    Card(title: "Uncategorized — last 7 days") {
-                        ItemList(items: Array(uncategorized.prefix(25)), total: recent.total)
+            if !uncategorized.isEmpty {
+                Panel(title: "Needs a category",
+                      subtitle: "\(uncategorized.count) apps and sites · \(formatDuration(uncategorizedTime)) in the last 7 days",
+                      padded: false) {
+                    HStack(spacing: 6) {
+                        StatusDot(color: T.amber, size: 6)
+                        Text("Counted as neutral").font(.geist(12)).foregroundStyle(T.fg2)
                     }
-                }
-
-                ForEach(store.config.categories) { category in
-                    CategoryEditor(categoryID: category.id)
+                } content: {
+                    ItemTable(items: Array(uncategorized.prefix(20)), total: recent.total)
                 }
             }
-            .padding(24)
+
+            ForEach(store.config.categories) { category in
+                CategoryEditor(categoryID: category.id)
+            }
         }
     }
 }
@@ -46,7 +51,7 @@ private struct CategoryEditor: View {
     let categoryID: UUID
     @State private var newPattern = ""
     @State private var newKind: RuleKind = .domain
-    @State private var expanded = false
+    @State private var showAllRules = false
 
     var body: some View {
         @Bindable var store = model.store
@@ -55,71 +60,97 @@ private struct CategoryEditor: View {
             let rules = store.config.rules.filter { $0.categoryID == categoryID }
                 .sorted { ($0.kind.rawValue, $0.pattern) < ($1.kind.rawValue, $1.pattern) }
 
-            Card {
-                HStack(spacing: 12) {
-                    Menu {
-                        ForEach(Config.palette, id: \.self) { hex in
-                            Button {
-                                store.config.categories[index].colorHex = hex
-                                store.saveConfigIfNeeded()
-                            } label: {
-                                Label(hex, systemImage: "circle.fill")
+            Panel {
+                VStack(alignment: .leading, spacing: 16) {
+                    HStack(spacing: 12) {
+                        Menu {
+                            ForEach(Config.palette, id: \.self) { hex in
+                                Button {
+                                    store.config.categories[index].colorHex = hex
+                                    store.saveConfigIfNeeded()
+                                } label: {
+                                    Image(nsImage: swatch(hex))
+                                    Text(hex)
+                                }
+                            }
+                        } label: {
+                            RoundedRectangle(cornerRadius: 6).fill(category.color)
+                                .frame(width: 22, height: 22)
+                                .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(T.fg.opacity(0.1)))
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                        .help("Change colour")
+
+                        TextField("", text: $store.config.categories[index].name)
+                            .textFieldStyle(.plain)
+                            .font(.geist(16, .semibold))
+                            .foregroundStyle(T.fg)
+                            .onSubmit { store.saveConfigIfNeeded() }
+
+                        Segmented(
+                            selection: Binding(
+                                get: { store.config.categories[index].productivity },
+                                set: { store.config.categories[index].productivity = $0; store.saveConfigIfNeeded() }),
+                            options: Productivity.allCases.map { ($0, $0.label) },
+                            compact: true)
+
+                        Menu {
+                            Button("Delete category", role: .destructive) { store.deleteCategory(categoryID) }
+                        } label: {
+                            Image(systemName: "ellipsis").font(.system(size: 13)).foregroundStyle(T.fg2)
+                                .frame(width: 28, height: 28).contentShape(Rectangle())
+                        }
+                        .menuStyle(.button)
+                        .buttonStyle(.plain)
+                        .menuIndicator(.hidden)
+                        .fixedSize()
+                    }
+
+                    if rules.isEmpty {
+                        Text("No rules yet — add a website or app below, or assign items from the Overview tab.")
+                            .font(.geist(13)).foregroundStyle(T.fg3)
+                    } else {
+                        let limit = 12
+                        FlowLayout(spacing: 6) {
+                            ForEach(showAllRules ? rules : Array(rules.prefix(limit))) { rule in
+                                RuleChip(rule: rule) {
+                                    store.config.rules.removeAll { $0.id == rule.id }
+                                    store.saveConfigIfNeeded()
+                                }
+                            }
+                            if rules.count > limit {
+                                Button(showAllRules ? "Show less" : "+\(rules.count - limit) more") {
+                                    withAnimation(.easeOut(duration: 0.15)) { showAllRules.toggle() }
+                                }
+                                .buttonStyle(TempoButtonStyle(kind: .ghost, height: 26))
                             }
                         }
-                    } label: {
-                        Circle().fill(category.color).frame(width: 16, height: 16)
                     }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-
-                    TextField("Name", text: $store.config.categories[index].name)
-                        .textFieldStyle(.plain)
-                        .font(.headline)
-                        .onSubmit { store.saveConfigIfNeeded() }
-
-                    Picker("", selection: $store.config.categories[index].productivity) {
-                        ForEach(Productivity.allCases) { Text($0.label).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .frame(width: 280)
-                    .onChange(of: category.productivity) { store.saveConfigIfNeeded() }
-
-                    Button {
-                        withAnimation { expanded.toggle() }
-                    } label: {
-                        Text("\(rules.count) rules")
-                        Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                    }
-                    .buttonStyle(.borderless)
-
-                    Button(role: .destructive) {
-                        store.deleteCategory(categoryID)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .buttonStyle(.borderless)
                 }
-
-                if expanded {
-                    FlowRules(rules: rules) { rule in
-                        store.config.rules.removeAll { $0.id == rule.id }
-                        store.saveConfigIfNeeded()
-                    }
-                    HStack {
-                        Picker("", selection: $newKind) {
-                            Text("Website").tag(RuleKind.domain)
-                            Text("App").tag(RuleKind.app)
-                        }
-                        .frame(width: 110)
-                        TextField(newKind == .domain ? "e.g. github.com" : "e.g. Xcode or com.apple.dt.Xcode",
-                                  text: $newPattern)
-                            .textFieldStyle(.roundedBorder)
-                            .onSubmit(addRule)
-                        Button("Add rule", action: addRule).disabled(newPattern.isEmpty)
-                    }
+            } footer: {
+                HStack(spacing: 8) {
+                    Text("\(rules.count) \(rules.count == 1 ? "rule" : "rules")").font(.mono(11))
+                    Spacer()
+                    Segmented(selection: $newKind, options: [(.domain, "Website"), (.app, "App")], compact: true)
+                    TField(placeholder: newKind == .domain ? "github.com" : "Xcode", text: $newPattern, mono: true,
+                           onSubmit: addRule)
+                        .frame(width: 220)
+                    Button("Add", action: addRule)
+                        .buttonStyle(TempoButtonStyle(kind: .primary, height: 30))
+                        .disabled(newPattern.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
+        }
+    }
+
+    private func swatch(_ hex: String) -> NSImage {
+        NSImage(size: NSSize(width: 12, height: 12), flipped: false) { rect in
+            NSColor(hex: hex).setFill()
+            NSBezierPath(roundedRect: rect, xRadius: 3, yRadius: 3).fill()
+            return true
         }
     }
 
@@ -135,25 +166,67 @@ private struct CategoryEditor: View {
     }
 }
 
-private struct FlowRules: View {
-    let rules: [Rule]
-    let onDelete: (Rule) -> Void
+private struct RuleChip: View {
+    let rule: Rule
+    let onDelete: () -> Void
+    @State private var hovering = false
 
     var body: some View {
-        LazyVGrid(columns: [GridItem(.adaptive(minimum: 170), alignment: .leading)], alignment: .leading, spacing: 6) {
-            ForEach(rules) { rule in
-                HStack(spacing: 5) {
-                    Image(systemName: rule.kind == .domain ? "globe" : "app.dashed").foregroundStyle(.secondary)
-                    Text(rule.pattern).lineLimit(1)
-                    Button { onDelete(rule) } label: {
-                        Image(systemName: "xmark.circle.fill").foregroundStyle(.tertiary)
-                    }
-                    .buttonStyle(.borderless)
-                }
-                .font(.callout)
-                .padding(.horizontal, 8).padding(.vertical, 4)
-                .background(.quaternary.opacity(0.6), in: Capsule())
+        HStack(spacing: 6) {
+            Image(systemName: rule.kind == .domain ? "globe" : "macwindow")
+                .font(.system(size: 10)).foregroundStyle(T.fg3)
+            Text(rule.pattern).font(.mono(12)).foregroundStyle(T.fg).lineLimit(1)
+            Button(action: onDelete) {
+                Image(systemName: "xmark").font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(hovering ? T.fg : T.fg3)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Remove rule")
+        }
+        .padding(.leading, 8)
+        .padding(.trailing, 4)
+        .frame(height: 26)
+        .background(hovering ? T.hover : T.subtle, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(T.border))
+        .onHover { hovering = $0 }
+    }
+}
+
+/// Wrapping horizontal layout for chips.
+struct FlowLayout: Layout {
+    var spacing: CGFloat = 6
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let rows = arrange(width: proposal.width ?? .infinity, subviews: subviews)
+        return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0,
+                      height: rows.last.map { $0.y + $0.height } ?? 0)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        for row in arrange(width: bounds.width, subviews: subviews) {
+            for (index, x) in row.items {
+                subviews[index].place(at: CGPoint(x: bounds.minX + x, y: bounds.minY + row.y), proposal: .unspecified)
             }
         }
+    }
+
+    private struct Row { var items: [(Int, CGFloat)] = []; var y: CGFloat; var width: CGFloat = 0; var height: CGFloat = 0 }
+
+    private func arrange(width: CGFloat, subviews: Subviews) -> [Row] {
+        var rows = [Row(y: 0)]
+        for (index, subview) in subviews.enumerated() {
+            let size = subview.sizeThatFits(.unspecified)
+            if rows[rows.count - 1].width + size.width > width, !rows[rows.count - 1].items.isEmpty {
+                let last = rows[rows.count - 1]
+                rows.append(Row(y: last.y + last.height + spacing))
+            }
+            let x = rows[rows.count - 1].width
+            rows[rows.count - 1].items.append((index, x))
+            rows[rows.count - 1].width = x + size.width + spacing
+            rows[rows.count - 1].height = max(rows[rows.count - 1].height, size.height)
+        }
+        return rows
     }
 }
