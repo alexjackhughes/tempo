@@ -2,6 +2,8 @@ import SwiftUI
 
 struct CategoriesView: View {
     @Environment(AppModel.self) private var model
+    @State private var creating = false
+    @State private var highlighted: UUID?
 
     var body: some View {
         let store = model.store
@@ -10,39 +12,127 @@ struct CategoriesView: View {
         let uncategorized = recent.items.filter { $0.category == nil }
         let uncategorizedTime = uncategorized.reduce(0) { $0 + $1.seconds }
 
-        VStack(alignment: .leading, spacing: 24) {
-            PageHeader(title: "Categories",
-                       subtitle: "Rules map apps and websites to categories. Changes apply to all past data.") {
-                Button {
-                    let hex = Config.palette[store.config.categories.count % Config.palette.count]
-                    store.config.categories.append(Category(name: "New category", colorHex: hex, productivity: .neutral))
-                    store.saveConfigIfNeeded()
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
-                        Text("New category")
+        ScrollViewReader { proxy in
+            VStack(alignment: .leading, spacing: 24) {
+                PageHeader(title: "Categories",
+                           subtitle: "Rules map apps and websites to categories. Changes apply to all past data.") {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) { creating = true }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "plus").font(.system(size: 10, weight: .semibold))
+                            Text("New category")
+                        }
+                    }
+                    .buttonStyle(.primary)
+                    .disabled(creating)
+                }
+
+                if creating {
+                    NewCategoryForm(onCancel: {
+                        withAnimation(.easeOut(duration: 0.18)) { creating = false }
+                    }, onCreate: { category in
+                        store.config.categories.append(category)
+                        store.saveConfigIfNeeded()
+                        creating = false
+                        highlighted = category.id
+                        DispatchQueue.main.async {
+                            withAnimation(.easeOut(duration: 0.3)) { proxy.scrollTo(category.id, anchor: .top) }
+                        }
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                            withAnimation { if highlighted == category.id { highlighted = nil } }
+                        }
+                    })
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
+
+                if !uncategorized.isEmpty {
+                    Panel(title: "Needs a category",
+                          subtitle: "\(uncategorized.count) apps and sites · \(formatDuration(uncategorizedTime)) in the last 7 days",
+                          padded: false) {
+                        HStack(spacing: 6) {
+                            StatusDot(color: T.amber, size: 6)
+                            Text("Counted as neutral").font(.geist(12)).foregroundStyle(T.fg2)
+                        }
+                    } content: {
+                        ItemTable(items: Array(uncategorized.prefix(20)), total: recent.total)
                     }
                 }
-                .buttonStyle(.secondary)
-            }
 
-            if !uncategorized.isEmpty {
-                Panel(title: "Needs a category",
-                      subtitle: "\(uncategorized.count) apps and sites · \(formatDuration(uncategorizedTime)) in the last 7 days",
-                      padded: false) {
-                    HStack(spacing: 6) {
-                        StatusDot(color: T.amber, size: 6)
-                        Text("Counted as neutral").font(.geist(12)).foregroundStyle(T.fg2)
-                    }
-                } content: {
-                    ItemTable(items: Array(uncategorized.prefix(20)), total: recent.total)
+                ForEach(store.config.categories) { category in
+                    CategoryEditor(categoryID: category.id)
+                        .overlay(RoundedRectangle(cornerRadius: T.radius)
+                            .strokeBorder(T.blue, lineWidth: 2)
+                            .opacity(highlighted == category.id ? 1 : 0))
+                        .id(category.id)
                 }
-            }
-
-            ForEach(store.config.categories) { category in
-                CategoryEditor(categoryID: category.id)
             }
         }
+    }
+}
+
+struct NewCategoryForm: View {
+    @Environment(AppModel.self) private var model
+    let onCancel: () -> Void
+    let onCreate: (Category) -> Void
+
+    @State private var name = ""
+    @State private var productivity: Productivity = .productive
+    @State private var colorHex = ""
+
+    private var trimmed: String { name.trimmingCharacters(in: .whitespaces) }
+
+    var body: some View {
+        let existing = model.store.config.categories
+        let isDuplicate = existing.contains { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }
+        let color = colorHex.isEmpty ? Config.palette[existing.count % Config.palette.count] : colorHex
+
+        Panel(title: "New category", subtitle: "Then add websites and apps to it, or assign them from Overview.") {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack(spacing: 12) {
+                    TField(placeholder: "e.g. Learning, Writing, Admin", text: $name, autofocus: true, onSubmit: create)
+                    Segmented(selection: $productivity, options: Productivity.allCases.map { ($0, $0.label) },
+                              compact: true)
+                }
+                HStack(spacing: 8) {
+                    Text("Colour").font(.geist(13)).foregroundStyle(T.fg2).frame(width: 52, alignment: .leading)
+                    ForEach(Config.palette, id: \.self) { hex in
+                        Button { colorHex = hex } label: {
+                            RoundedRectangle(cornerRadius: 5).fill(Color(hex: hex))
+                                .frame(width: 20, height: 20)
+                                .overlay(RoundedRectangle(cornerRadius: 7)
+                                    .strokeBorder(T.fg, lineWidth: 1.5)
+                                    .padding(-3)
+                                    .opacity(color == hex ? 1 : 0))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                if isDuplicate {
+                    Text("A category with this name already exists.").font(.geist(12)).foregroundStyle(T.red)
+                }
+            }
+        } footer: {
+            HStack {
+                Text("Press ↩ to create").font(.mono(11))
+                Spacer()
+                Button("Cancel", action: onCancel)
+                    .buttonStyle(TempoButtonStyle(kind: .ghost, height: 30))
+                    .keyboardShortcut(.cancelAction)
+                Button("Create category", action: create)
+                    .buttonStyle(TempoButtonStyle(kind: .primary, height: 30))
+                    .disabled(trimmed.isEmpty || isDuplicate)
+            }
+        }
+    }
+
+    private func create() {
+        let existing = model.store.config.categories
+        guard !trimmed.isEmpty,
+              !existing.contains(where: { $0.name.caseInsensitiveCompare(trimmed) == .orderedSame }) else { return }
+        let hex = colorHex.isEmpty ? Config.palette[existing.count % Config.palette.count] : colorHex
+        onCreate(Category(name: trimmed, colorHex: hex, productivity: productivity))
     }
 }
 

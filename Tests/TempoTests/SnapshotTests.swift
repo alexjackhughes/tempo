@@ -51,6 +51,8 @@ final class SnapshotTests: XCTestCase {
         model.pomodoro.stop()
         render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),
                appearance: .darkAqua, to: "\(out)/focus-dark.png")
+        render(page(NewCategoryForm(onCancel: {}, onCreate: { _ in }), model), size: CGSize(width: 1180, height: 320),
+               appearance: .aqua, to: "\(out)/new-category.png")
         render(page(CategoriesView(), model), size: CGSize(width: 1180, height: 1400),
                appearance: .aqua, to: "\(out)/categories-light.png")
         render(page(SettingsView(), model), size: CGSize(width: 1180, height: 1500),
