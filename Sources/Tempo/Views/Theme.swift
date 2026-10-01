@@ -576,7 +576,8 @@ struct CategoryDot: View {
     }
 }
 
-/// Pill that opens a menu for (re)assigning an app or site to a category — creates a rule.
+/// Pill that opens a menu for (re)assigning an app or site to a category. Each choice saves a permanent
+/// rule that applies to all past and future activity; sites cover their whole domain by default.
 struct AssignMenu: View {
     @Environment(AppModel.self) private var model
     let item: ItemKey
@@ -584,19 +585,16 @@ struct AssignMenu: View {
     @State private var hovering = false
 
     var body: some View {
+        let broader = item.broaderDomain
         Menu {
-            ForEach(Productivity.allCases) { productivity in
-                let categories = model.store.config.categories.filter { $0.productivity == productivity }
-                if !categories.isEmpty {
-                    Section(productivity.label) {
-                        ForEach(categories) { category in
-                            Button(category.name) { model.store.assign(item, to: category.id) }
-                        }
-                    }
-                }
+            if let broader {
+                Section("All of \(broader)") { categoryButtons(ItemKey(kind: .domain, value: broader)) }
+                Menu("Only \(item.value)") { categoryButtons(item) }
+            } else {
+                Section(item.value) { categoryButtons(item) }
             }
             Divider()
-            Button("Uncategorized") { model.store.assign(item, to: nil) }
+            Button("Uncategorized") { apply(item, nil) }
         } label: {
             HStack(spacing: 6) {
                 CategoryDot(category: current, size: 7)
@@ -619,6 +617,89 @@ struct AssignMenu: View {
         .menuIndicator(.hidden)
         .fixedSize()
         .onHover { hovering = $0 }
+    }
+
+    @ViewBuilder
+    private func categoryButtons(_ target: ItemKey) -> some View {
+        ForEach(Productivity.allCases) { productivity in
+            let categories = model.store.config.categories.filter { $0.productivity == productivity }
+            if !categories.isEmpty {
+                Divider()
+                Text(productivity.label)
+                ForEach(categories) { category in
+                    Button(category.name) { apply(target, category) }
+                }
+            }
+        }
+    }
+
+    private func apply(_ target: ItemKey, _ category: Category?) {
+        let store = model.store
+        let previous = store.config.rules
+        // A broader rule must also clear the exact-subdomain rule, or that would keep winning.
+        store.assign(target, to: category?.id, clearing: target == item ? [] : [item])
+        model.show(Toast(
+            message: category.map { "\(target.value) → \(target.kind == .domain && target != item ? "\($0.name) (whole domain)" : $0.name)" }
+                ?? "\(target.value) is now uncategorized",
+            detail: "Saved as a rule — applies to all past and future activity.",
+            undo: { [weak store] in
+                store?.config.rules = previous
+                store?.saveConfigIfNeeded()
+            }))
+    }
+}
+
+/// Small hover button that hides an app or site everywhere (with undo).
+struct HideButton: View {
+    @Environment(AppModel.self) private var model
+    let item: ItemKey
+
+    var body: some View {
+        Button {
+            let store = model.store
+            store.hide(item)
+            model.show(Toast(message: "Hidden \(item.value)",
+                             detail: "Excluded from all totals and scores. Unhide it under Categories.",
+                             undo: { [weak store] in store?.unhide(item) }))
+        } label: {
+            Image(systemName: "eye.slash").font(.system(size: 11))
+        }
+        .buttonStyle(TempoButtonStyle(kind: .ghost, height: 24))
+        .help("Hide \(item.value)")
+    }
+}
+
+struct ToastView: View {
+    @Environment(AppModel.self) private var model
+    let toast: Toast
+
+    var body: some View {
+        HStack(spacing: 14) {
+            Image(systemName: "checkmark.circle.fill").foregroundStyle(T.green)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(toast.message).font(.geist(13, .medium)).foregroundStyle(T.fg)
+                if let detail = toast.detail {
+                    Text(detail).font(.geist(12)).foregroundStyle(T.fg2)
+                }
+            }
+            if let undo = toast.undo {
+                Button("Undo") {
+                    undo()
+                    model.dismissToast()
+                }
+                .buttonStyle(TempoButtonStyle(kind: .secondary, height: 28))
+            }
+            Button { model.dismissToast() } label: {
+                Image(systemName: "xmark").font(.system(size: 9, weight: .bold))
+            }
+            .buttonStyle(TempoButtonStyle(kind: .ghost, height: 24))
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 8)
+        .padding(.vertical, 10)
+        .background(T.surface, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(T.borderStrong))
+        .shadow(color: .black.opacity(0.12), radius: 16, y: 6)
     }
 }
 

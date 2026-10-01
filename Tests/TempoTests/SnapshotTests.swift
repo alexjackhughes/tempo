@@ -38,7 +38,7 @@ final class SnapshotTests: XCTestCase {
                appearance: .darkAqua, to: "\(out)/menubar-strip.png")
 
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            render(MenuBarView().environment(model), size: CGSize(width: 300, height: 380),
+            render(MenuBarView().environment(model), size: CGSize(width: 320, height: 430),
                    appearance: appearance, to: "\(out)/menubar-\(suffix).png")
             render(page(DayView(), model), size: CGSize(width: 1180, height: 1650),
                    appearance: appearance, to: "\(out)/overview-\(suffix).png")
@@ -46,7 +46,7 @@ final class SnapshotTests: XCTestCase {
                    appearance: appearance, to: "\(out)/trends-\(suffix).png")
         }
         model.pomodoro.startFocus(task: "Auth refactor")
-        render(MenuBarView().environment(model), size: CGSize(width: 300, height: 380),
+        render(MenuBarView().environment(model), size: CGSize(width: 320, height: 430),
                appearance: .darkAqua, to: "\(out)/menubar-running.png")
         model.pomodoro.stop()
         render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),

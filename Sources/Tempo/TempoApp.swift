@@ -6,6 +6,13 @@ extension Notification.Name {
     static let openDashboard = Notification.Name("TempoOpenDashboard")
 }
 
+struct Toast: Identifiable {
+    let id = UUID()
+    let message: String
+    var detail: String?
+    var undo: (() -> Void)?
+}
+
 @Observable
 final class AppModel {
     static let shared = AppModel()
@@ -14,12 +21,23 @@ final class AppModel {
     let pomodoro: Pomodoro
     @ObservationIgnored let tracker: ActivityTracker
     @ObservationIgnored private var saveTimer: Timer?
+    /// Transient confirmation shown at the bottom of the dashboard.
+    private(set) var toast: Toast?
 
     init(store: Store = Store()) {
         self.store = store
         pomodoro = Pomodoro(store: store)
         tracker = ActivityTracker(store: store)
     }
+
+    func show(_ toast: Toast) {
+        self.toast = toast
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
+            if self?.toast?.id == toast.id { self?.toast = nil }
+        }
+    }
+
+    func dismissToast() { toast = nil }
 
     func start() {
         tracker.start()

@@ -29,7 +29,7 @@ struct MenuBarLabel: View {
     }
 }
 
-/// The popover: task, timer ring, today's count. Everything else lives in the dashboard.
+/// The popover: task, minute dial, one action, today's count. Everything else lives in the dashboard.
 struct MenuBarView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
@@ -41,72 +41,133 @@ struct MenuBarView: View {
         let done = store.sessions(on: .now).filter(\.completed).count
 
         VStack(spacing: 0) {
-            // Task
-            Group {
+            header(pomodoro.phase)
+            Hairline()
+
+            VStack(spacing: 20) {
                 if pomodoro.phase == .idle {
-                    TaskField(text: $task, onSubmit: start)
+                    TField(placeholder: "What are you working on?", text: $task, autofocus: true, onSubmit: start)
                 } else {
-                    Text(pomodoro.phase == .rest ? "Break" : (pomodoro.task.isEmpty ? "Focusing" : pomodoro.task))
-                        .font(.geist(17, .medium))
-                        .foregroundStyle(T.fg)
-                        .lineLimit(1)
-                }
-            }
-            .frame(height: 30)
-            .padding(.horizontal, 24)
-            .padding(.top, 22)
-
-            TimerRing(onStart: start)
-                .padding(.vertical, 22)
-
-            // Footer
-            HStack {
-                Button {
-                    openDashboard()
-                } label: {
-                    Image(systemName: "chart.bar.xaxis").font(.system(size: 14))
-                }
-                .buttonStyle(TempoButtonStyle(kind: .ghost, height: 30))
-                .keyboardShortcut("d")
-                .help("Open Tempo (⌘D)")
-
-                Spacer()
-
-                HStack(spacing: 6) {
-                    Text("Today").foregroundStyle(T.fg2)
-                    Text("\(done)").foregroundStyle(T.fg)
-                    Text("/ \(store.config.dailyPomodoroGoal)").foregroundStyle(T.fg3)
-                }
-                .font(.geist(15, .medium))
-                .monospacedDigit()
-
-                Spacer()
-
-                Menu {
-                    Button(store.trackingPaused ? "Resume tracking" : "Pause tracking") {
-                        store.trackingPaused.toggle()
-                        model.tracker.sample()
+                    VStack(alignment: .leading, spacing: 4) {
+                        Eyebrow(pomodoro.phase == .rest ? "Up next" : "Working on")
+                        Text(pomodoro.phase == .rest ? "Take a short break"
+                             : (pomodoro.task.isEmpty ? "Untitled session" : pomodoro.task))
+                            .font(.geist(14, .medium)).foregroundStyle(T.fg).lineLimit(1)
                     }
-                    Button("Open Tempo", action: openDashboard)
-                    Divider()
-                    Button("Quit Tempo") { NSApp.terminate(nil) }
-                } label: {
-                    Image(systemName: "ellipsis").font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(T.fg2)
-                        .frame(width: 30, height: 30)
-                        .contentShape(Rectangle())
+                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .menuIndicator(.hidden)
-                .fixedSize()
+
+                TimerDial()
+
+                actionButton(pomodoro.phase)
             }
-            .padding(.horizontal, 10)
-            .frame(height: 48)
-            .overlay(alignment: .top) { Hairline() }
+            .padding(20)
+
+            footer(done: done, goal: store.config.dailyPomodoroGoal)
         }
-        .frame(width: 300)
+        .frame(width: 320)
         .background(T.bg)
+    }
+
+    private func header(_ phase: Pomodoro.Phase) -> some View {
+        HStack(spacing: 8) {
+            TempoMark(size: 18)
+            Text("Tempo").font(.geist(13, .semibold)).foregroundStyle(T.fg)
+            Spacer()
+            HStack(spacing: 6) {
+                Circle().fill(phase == .focus ? T.blue : phase == .rest ? T.green : T.fg3).frame(width: 6, height: 6)
+                Text(phase == .focus ? "Focusing" : phase == .rest ? "On break" : "Ready")
+                    .font(.geist(12, .medium)).foregroundStyle(T.fg2)
+            }
+            .padding(.horizontal, 8)
+            .frame(height: 22)
+            .overlay(Capsule().strokeBorder(T.border))
+            Menu {
+                Button(model.store.trackingPaused ? "Resume tracking" : "Pause tracking") {
+                    model.store.trackingPaused.toggle()
+                    model.tracker.sample()
+                }
+                Button("Open Tempo", action: openDashboard)
+                Divider()
+                Button("Quit Tempo") { NSApp.terminate(nil) }
+            } label: {
+                Image(systemName: "ellipsis").font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(T.fg2)
+                    .frame(width: 26, height: 26)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(height: 48)
+    }
+
+    @ViewBuilder
+    private func actionButton(_ phase: Pomodoro.Phase) -> some View {
+        switch phase {
+        case .idle:
+            Button(action: start) {
+                HStack(spacing: 8) {
+                    Image(systemName: "play.fill").font(.system(size: 10))
+                    Text("Start focus")
+                    Spacer()
+                    Kbd("↩")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(TempoButtonStyle(kind: .primary, height: 38))
+        case .focus:
+            Button { model.pomodoro.stop() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "stop.fill").font(.system(size: 9))
+                    Text("End session early")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(TempoButtonStyle(kind: .secondary, height: 38))
+        case .rest:
+            Button { model.pomodoro.skipBreak() } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "forward.end.fill").font(.system(size: 9))
+                    Text("Skip break")
+                }
+                .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(TempoButtonStyle(kind: .secondary, height: 38))
+        }
+    }
+
+    private func footer(done: Int, goal: Int) -> some View {
+        HStack(spacing: 10) {
+            Text("Today").font(.geist(12)).foregroundStyle(T.fg2)
+            HStack(spacing: 3) {
+                ForEach(0..<max(goal, done), id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(i < done ? T.fg : T.fill)
+                        .frame(width: 8, height: 8)
+                }
+            }
+            Text("\(done)/\(goal)").font(.mono(11, .medium)).foregroundStyle(T.fg2)
+            Spacer()
+            Button(action: openDashboard) {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar.xaxis").font(.system(size: 11))
+                    Text("Dashboard")
+                }
+            }
+            .buttonStyle(TempoButtonStyle(kind: .ghost, height: 28))
+            .keyboardShortcut("d")
+            .help("Open Tempo (⌘D)")
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 8)
+        .frame(height: 46)
+        .background(T.subtle)
+        .overlay(alignment: .top) { Hairline() }
     }
 
     private func openDashboard() {
@@ -121,107 +182,70 @@ struct MenuBarView: View {
     }
 }
 
-/// Borderless, centred task input that focuses itself whenever the popover opens.
-private struct TaskField: View {
-    @Binding var text: String
-    let onSubmit: () -> Void
-    @FocusState private var focused: Bool
-    @State private var window: NSWindow?
-
-    var body: some View {
-        TextField("", text: $text, prompt: Text("What are you focusing on?").foregroundStyle(T.fg3))
-            .textFieldStyle(.plain)
-            .font(.geist(17))
-            .foregroundStyle(T.fg)
-            .multilineTextAlignment(.center)
-            .focused($focused)
-            .onSubmit(onSubmit)
-            .background { WindowReader(window: $window) }
-            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
-                if let window, note.object as? NSWindow === window { focused = true }
-            }
-            .onAppear { DispatchQueue.main.async { focused = true } }
-    }
-}
-
-private struct TimerRing: View {
+/// A 60-minute dial: one tick per minute, lit ticks are the minutes remaining (like a kitchen timer).
+private struct TimerDial: View {
     @Environment(AppModel.self) private var model
-    let onStart: () -> Void
-
-    private let diameter: CGFloat = 220
-    private let lineWidth: CGFloat = 5
 
     var body: some View {
         let pomodoro = model.pomodoro
         let phase = pomodoro.phase
-        let fraction = phase == .idle ? 1 : max(0, 1 - pomodoro.progress)
-        let tint = phase == .rest ? T.green : T.fg
-        let seconds = phase == .idle ? TimeInterval(model.store.config.focusMinutes * 60) : pomodoro.remaining
+        let store = model.store
+        let seconds = phase == .idle ? TimeInterval(store.config.focusMinutes * 60) : pomodoro.remaining
+        let litTicks = min(60, Int((seconds / 60).rounded(.up)))
+        let tint = phase == .rest ? T.green : phase == .focus ? T.fg : T.fg2
 
         ZStack {
-            Circle().stroke(T.fill, lineWidth: lineWidth)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(tint, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-            // Knob at the leading edge of the remaining time.
-            Circle()
-                .fill(T.bg)
-                .overlay(Circle().strokeBorder(tint, lineWidth: lineWidth - 1))
-                .frame(width: 20, height: 20)
-                .offset(y: -diameter / 2)
-                .rotationEffect(.degrees(360 * fraction))
-
-            VStack(spacing: 10) {
-                Text(formatClock(seconds))
-                    .font(.geist(58))
-                    .tracking(-2.5)
-                    .monospacedDigit()
-                    .foregroundStyle(phase == .rest ? T.fg2 : T.fg)
-                    .contentTransition(.numericText(countsDown: true))
-
-                Button {
-                    switch phase {
-                    case .idle: onStart()
-                    case .focus: pomodoro.stop()
-                    case .rest: pomodoro.skipBreak()
-                    }
-                } label: {
-                    Image(systemName: phase == .idle ? "play.fill" : phase == .focus ? "stop.fill" : "forward.end.fill")
-                        .font(.system(size: phase == .idle ? 18 : 15))
-                        .offset(x: phase == .idle ? 2 : 0)
-                        .frame(width: 48, height: 48)
-                        .foregroundStyle(phase == .idle ? T.inverted : T.fg)
-                        .background(phase == .idle ? T.fg : T.hover, in: Circle())
-                        .overlay(Circle().strokeBorder(phase == .idle ? .clear : T.border))
-                        .contentShape(Circle())
+            Canvas { ctx, size in
+                let center = CGPoint(x: size.width / 2, y: size.height / 2)
+                let radius = min(size.width, size.height) / 2 - 1
+                for i in 0..<60 {
+                    let major = i % 5 == 0
+                    let color: Color = i < litTicks ? tint : (major ? T.borderStrong : T.fill)
+                    let style = StrokeStyle(lineWidth: major ? 2.2 : 1.6, lineCap: .round)
+                    ctx.stroke(Self.tick(i, center: center, radius: radius, length: major ? 11 : 7),
+                               with: .color(color), style: style)
                 }
-                .buttonStyle(.plain)
-                .help(phase == .idle ? "Start (↩)" : phase == .focus ? "Stop session" : "Skip break")
+            }
 
-                Text(caption(for: phase))
+            VStack(spacing: 6) {
+                Eyebrow(phase == .focus ? "Focus" : phase == .rest ? "Break" : "Session")
+                Text(formatClock(seconds))
+                    .font(.geist(50, .medium))
+                    .tracking(-2)
+                    .monospacedDigit()
+                    .foregroundStyle(T.fg)
+                    .contentTransition(.numericText(countsDown: true))
+                Text(caption(phase))
                     .font(.mono(11))
                     .foregroundStyle(T.fg3)
                     .frame(height: 14)
             }
         }
-        .frame(width: diameter, height: diameter)
-        // A short ease per tick rather than a continuous 1s animation keeps the popover idle between seconds.
-        .animation(.easeOut(duration: 0.25), value: fraction)
+        .frame(width: 210, height: 210)
+        .animation(.easeOut(duration: 0.25), value: litTicks)
     }
 
-    private func caption(for phase: Pomodoro.Phase) -> String {
+    private static func tick(_ index: Int, center: CGPoint, radius: CGFloat, length: CGFloat) -> Path {
+        let angle = CGFloat(index) / 60 * 2 * .pi - .pi / 2
+        let dx = cos(angle), dy = sin(angle)
+        var path = Path()
+        path.move(to: CGPoint(x: center.x + dx * (radius - length), y: center.y + dy * (radius - length)))
+        path.addLine(to: CGPoint(x: center.x + dx * radius, y: center.y + dy * radius))
+        return path
+    }
+
+    private func caption(_ phase: Pomodoro.Phase) -> String {
         let pomodoro = model.pomodoro
+        let end = pomodoro.endDate?.formatted(date: .omitted, time: .shortened) ?? ""
         switch phase {
         case .idle:
-            return "\(model.store.config.focusMinutes) min focus"
+            return "\(model.store.config.focusMinutes) min · \(model.store.config.breakMinutes) min break"
         case .focus:
             guard let start = pomodoro.startDate else { return "" }
             let score = model.store.summary(in: DateInterval(start: start, end: max(start, pomodoro.now))).score
-            if let score { return "focus score \(Int(score.rounded()))" }
-            return "ends \(pomodoro.endDate?.formatted(date: .omitted, time: .shortened) ?? "")"
+            return score.map { "ends \(end) · score \(Int($0.rounded()))" } ?? "ends \(end)"
         case .rest:
-            return "break"
+            return "back at \(end)"
         }
     }
 }

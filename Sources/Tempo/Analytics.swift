@@ -5,6 +5,8 @@ struct Categorizer {
     private let byID: [UUID: Category]
     private let appRules: [String: UUID]
     private let domainRules: [String: UUID]
+    private let hiddenApps: Set<String>
+    private let hiddenDomains: Set<String>
 
     init(config: Config) {
         byID = Dictionary(config.categories.map { ($0.id, $0) }, uniquingKeysWith: { a, _ in a })
@@ -19,6 +21,17 @@ struct Categorizer {
         }
         appRules = apps
         domainRules = domains
+        hiddenApps = Set(config.hidden.filter { $0.kind == .app }.map { $0.value.lowercased() })
+        hiddenDomains = Set(config.hidden.filter { $0.kind == .domain }.map { $0.value.lowercased() })
+    }
+
+    func isHidden(_ segment: ActivitySegment) -> Bool {
+        if let domain = segment.domain {
+            guard !hiddenDomains.isEmpty else { return false }
+            let labels = domain.split(separator: ".")
+            return labels.indices.contains { hiddenDomains.contains(labels[$0...].joined(separator: ".")) }
+        }
+        return hiddenApps.contains(segment.app.lowercased()) || hiddenApps.contains(segment.bundleID.lowercased())
     }
 
     func category(for segment: ActivitySegment) -> Category? {
@@ -84,7 +97,7 @@ struct Summary {
 
         for segment in segments {
             let seconds = segment.duration
-            guard seconds > 0 else { continue }
+            guard seconds > 0, !categorizer.isHidden(segment) else { continue }
             let category = categorizer.category(for: segment)
             total += seconds
             byProductivity[category?.productivity ?? .neutral, default: 0] += seconds
@@ -117,7 +130,7 @@ struct HourBucket: Identifiable {
 func hourlyBreakdown(_ segments: [ActivitySegment], categorizer: Categorizer) -> [HourBucket] {
     let calendar = Calendar.current
     var totals: [Int: [Productivity: TimeInterval]] = [:]
-    for segment in segments where segment.duration > 0 {
+    for segment in segments where segment.duration > 0 && !categorizer.isHidden(segment) {
         let productivity = categorizer.category(for: segment)?.productivity ?? .neutral
         var cursor = segment.start
         while cursor < segment.end {

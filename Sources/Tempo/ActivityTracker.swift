@@ -5,6 +5,13 @@ import CoreGraphics
 final class ActivityTracker {
     static let sampleInterval: TimeInterval = 5
 
+    /// System surfaces that briefly take focus but aren't real activity.
+    static let ignoredBundleIDs: Set<String> = [
+        "com.apple.loginwindow", "com.apple.ScreenSaver.Engine", "com.apple.dock",
+        "com.apple.UserNotificationCenter", "com.apple.accessibility.universalAccessAuthWarn",
+        "com.apple.SecurityAgent", "com.apple.coreservices.uiagent", "com.apple.notificationcenterui",
+    ]
+
     private let store: Store
     let browser = BrowserURLReader()
     private var timer: Timer?
@@ -68,7 +75,7 @@ final class ActivityTracker {
 
         guard let app = NSWorkspace.shared.frontmostApplication else { return }
         let bundleID = app.bundleIdentifier ?? ""
-        if bundleID == "com.apple.loginwindow" || bundleID == "com.apple.ScreenSaver.Engine" {
+        if Self.ignoredBundleIDs.contains(bundleID) {
             store.breakContinuity()
             return
         }

@@ -72,6 +72,8 @@ struct Config: Codable, Equatable {
     var idleThreshold: TimeInterval = 180
     var trackBrowserURLs = true
     var dailyPomodoroGoal = 8
+    /// Apps and sites excluded from all views, totals and scores.
+    var hidden: [ItemKey] = []
 
     init(categories: [Category], rules: [Rule]) {
         self.categories = categories
@@ -87,12 +89,32 @@ struct Config: Codable, Equatable {
         idleThreshold = try c.decodeIfPresent(TimeInterval.self, forKey: .idleThreshold) ?? 180
         trackBrowserURLs = try c.decodeIfPresent(Bool.self, forKey: .trackBrowserURLs) ?? true
         dailyPomodoroGoal = try c.decodeIfPresent(Int.self, forKey: .dailyPomodoroGoal) ?? 8
+        hidden = try c.decodeIfPresent([ItemKey].self, forKey: .hidden) ?? []
     }
 }
 
-struct ItemKey: Hashable {
+struct ItemKey: Codable, Hashable {
     var kind: RuleKind
     var value: String
+
+    /// For a site like "app-eu1.hubspot.com", the domain a rule should normally cover ("hubspot.com").
+    /// Returns nil when the item already is its root, or the root hosts unrelated products (google.com).
+    var broaderDomain: String? {
+        guard kind == .domain else { return nil }
+        let labels = value.split(separator: ".").map(String.init)
+        guard labels.count > 2 else { return nil }
+        let secondLevel: Set<String> = ["co", "com", "org", "net", "ac", "gov", "edu"]
+        let keep = labels.count >= 3 && secondLevel.contains(labels[labels.count - 2]) && labels.last!.count == 2 ? 3 : 2
+        guard labels.count > keep else { return nil }
+        let root = labels.suffix(keep).joined(separator: ".")
+        return ItemKey.sharedRoots.contains(root) ? nil : root
+    }
+
+    /// Domains whose subdomains are genuinely different things (Docs vs Meet vs Search).
+    static let sharedRoots: Set<String> = [
+        "google.com", "apple.com", "microsoft.com", "office.com", "live.com", "amazon.com", "amazon.co.uk",
+        "github.io", "vercel.app", "netlify.app", "notion.site", "herokuapp.com", "atlassian.net", "zoom.us",
+    ]
 }
 
 // MARK: - Defaults

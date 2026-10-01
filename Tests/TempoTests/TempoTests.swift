@@ -94,4 +94,36 @@ final class TempoTests: XCTestCase {
         XCTAssertEqual(reloaded.sessions.count, 1)
         XCTAssertEqual(reloaded.config.focusMinutes, 25)
     }
+
+    func testBroaderDomain() {
+        XCTAssertEqual(ItemKey(kind: .domain, value: "app-eu1.hubspot.com").broaderDomain, "hubspot.com")
+        XCTAssertEqual(ItemKey(kind: .domain, value: "news.bbc.co.uk").broaderDomain, "bbc.co.uk")
+        XCTAssertNil(ItemKey(kind: .domain, value: "youtube.com").broaderDomain)
+        XCTAssertNil(ItemKey(kind: .domain, value: "meet.google.com").broaderDomain) // shared root
+        XCTAssertNil(ItemKey(kind: .app, value: "Xcode").broaderDomain)
+    }
+
+    func testDomainWideAssignmentCoversOtherSubdomainsAndClearsExactRule() {
+        let dev = store.config.categories.first { $0.name == "Development" }!
+        let social = store.config.categories.first { $0.name == "Social Media" }!
+        let exact = ItemKey(kind: .domain, value: "app-eu1.hubspot.com")
+        store.assign(exact, to: social.id)
+        store.assign(ItemKey(kind: .domain, value: "hubspot.com"), to: dev.id, clearing: [exact])
+        let other = ActivitySegment(start: base, end: base, app: "Dia", bundleID: "x", domain: "app.hubspot.com")
+        let original = ActivitySegment(start: base, end: base, app: "Dia", bundleID: "x", domain: "app-eu1.hubspot.com")
+        XCTAssertEqual(store.categorizer.category(for: other)?.name, "Development")
+        XCTAssertEqual(store.categorizer.category(for: original)?.name, "Development")
+    }
+
+    func testHiddenItemsAreExcludedFromTotals() {
+        for t in stride(from: 0.0, through: 60, by: 5) { sample(t, "Xcode") }
+        for t in stride(from: 65.0, through: 120, by: 5) { sample(t, "Safari", "youtube.com") }
+        store.breakContinuity()
+        store.hide(ItemKey(kind: .domain, value: "youtube.com"))
+        let summary = store.summary(in: DateInterval(start: base, end: base.addingTimeInterval(120)))
+        XCTAssertEqual(summary.total, 65, accuracy: 0.1)
+        XCTAssertEqual(summary.score!, 100, accuracy: 0.1)
+        store.unhide(ItemKey(kind: .domain, value: "youtube.com"))
+        XCTAssertEqual(store.summary(in: DateInterval(start: base, end: base.addingTimeInterval(120))).total, 120, accuracy: 0.1)
+    }
 }

@@ -38,6 +38,15 @@ struct DashboardView: View {
             .background(T.bg)
         }
         .background(T.bg)
+        .overlay(alignment: .bottom) {
+            if let toast = model.toast {
+                ToastView(toast: toast)
+                    .padding(.bottom, 24)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .id(toast.id)
+            }
+        }
+        .animation(.spring(duration: 0.3), value: model.toast?.id)
         .ignoresSafeArea(edges: .top)
         .frame(minWidth: 900, minHeight: 640)
         .background(WindowChrome())
@@ -365,6 +374,7 @@ struct ItemTable: View {
                 Spacer()
                 Eyebrow("Category").frame(width: 170, alignment: .leading)
                 Eyebrow("Time").frame(width: 70, alignment: .trailing)
+                Color.clear.frame(width: 28)
             }
             .padding(.horizontal, 20)
             .frame(height: 34)
@@ -407,6 +417,9 @@ private struct ItemRowView: View {
                 .frame(width: 170, alignment: .leading)
             Text(formatDuration(item.seconds)).font(.mono(12)).foregroundStyle(T.fg)
                 .frame(width: 70, alignment: .trailing)
+            HideButton(item: item.key)
+                .opacity(hovering ? 1 : 0)
+                .frame(width: 28)
         }
         .padding(.horizontal, 20)
         .frame(height: 50)

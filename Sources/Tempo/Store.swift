@@ -193,12 +193,27 @@ final class Store {
 
     // MARK: Mutations
 
-    func assign(_ item: ItemKey, to categoryID: UUID?) {
+    /// Creates a permanent rule. Rules are evaluated at read time, so this applies to all past and future activity.
+    /// `clearing` removes more specific rules (e.g. a subdomain) that would otherwise override the new one.
+    func assign(_ item: ItemKey, to categoryID: UUID?, clearing: [ItemKey] = []) {
         let pattern = item.value.lowercased()
-        config.rules.removeAll { $0.kind == item.kind && $0.pattern == pattern }
+        let stale = Set(([item] + clearing).map { ItemKey(kind: $0.kind, value: $0.value.lowercased()) })
+        config.rules.removeAll { stale.contains(ItemKey(kind: $0.kind, value: $0.pattern)) }
         if let categoryID {
             config.rules.append(Rule(kind: item.kind, pattern: pattern, categoryID: categoryID))
         }
+        saveConfigIfNeeded()
+    }
+
+    func hide(_ item: ItemKey) {
+        let key = ItemKey(kind: item.kind, value: item.value.lowercased())
+        guard !config.hidden.contains(key) else { return }
+        config.hidden.append(key)
+        saveConfigIfNeeded()
+    }
+
+    func unhide(_ item: ItemKey) {
+        config.hidden.removeAll { $0 == ItemKey(kind: item.kind, value: item.value.lowercased()) }
         saveConfigIfNeeded()
     }
 
