@@ -35,13 +35,17 @@ final class SnapshotTests: XCTestCase {
                appearance: .darkAqua, to: "\(out)/menubar-strip.png")
 
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            render(MenuBarView().environment(model), size: CGSize(width: 340, height: 600),
+            render(MenuBarView().environment(model), size: CGSize(width: 300, height: 380),
                    appearance: appearance, to: "\(out)/menubar-\(suffix).png")
             render(page(DayView(), model), size: CGSize(width: 1180, height: 1650),
                    appearance: appearance, to: "\(out)/overview-\(suffix).png")
             render(page(TrendsView(), model), size: CGSize(width: 1180, height: 1000),
                    appearance: appearance, to: "\(out)/trends-\(suffix).png")
         }
+        model.pomodoro.startFocus(task: "Auth refactor")
+        render(MenuBarView().environment(model), size: CGSize(width: 300, height: 380),
+               appearance: .darkAqua, to: "\(out)/menubar-running.png")
+        model.pomodoro.stop()
         render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),
                appearance: .darkAqua, to: "\(out)/focus-dark.png")
         render(page(CategoriesView(), model), size: CGSize(width: 1180, height: 1400),
