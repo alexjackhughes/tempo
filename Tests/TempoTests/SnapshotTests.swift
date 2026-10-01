@@ -17,6 +17,23 @@ final class SnapshotTests: XCTestCase {
         let model = AppModel(store: store)
         Fonts.register()
 
+        // Glyph at large size, and a mock menu bar strip at real size (2x).
+        render(HStack(spacing: 40) {
+            TempoGlyphView().frame(height: 200)
+            TempoMark(size: 120)
+            Image(nsImage: TempoGlyph.menuBar).renderingMode(.template).foregroundStyle(.black)
+                .scaleEffect(4).frame(width: 120)
+        }.padding(40).background(.white), size: CGSize(width: 640, height: 280),
+               appearance: .aqua, to: "\(out)/glyph.png")
+        render(HStack(spacing: 14) {
+            Image(systemName: "wifi"); Image(systemName: "battery.75")
+            Image(nsImage: TempoGlyph.menuBar)
+            HStack(spacing: 4) { Image(nsImage: TempoGlyph.menuBar); Text("18:42").monospacedDigit() }
+            Text("Thu 1 Oct 09:30")
+        }.font(.system(size: 13)).foregroundStyle(.white).padding(.horizontal, 12)
+            .frame(height: 24).background(Color(white: 0.15)), size: CGSize(width: 330, height: 24),
+               appearance: .darkAqua, to: "\(out)/menubar-strip.png")
+
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             render(MenuBarView().environment(model), size: CGSize(width: 340, height: 600),
                    appearance: appearance, to: "\(out)/menubar-\(suffix).png")

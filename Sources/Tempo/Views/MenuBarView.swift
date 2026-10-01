@@ -7,10 +7,14 @@ struct MenuBarLabel: View {
         let pomodoro = model.pomodoro
         switch pomodoro.phase {
         case .idle:
-            Image(systemName: model.store.trackingPaused ? "pause.circle" : "timer")
+            if model.store.trackingPaused {
+                Image(systemName: "pause.circle")
+            } else {
+                Image(nsImage: TempoGlyph.menuBar)
+            }
         case .focus:
-            HStack(spacing: 3) {
-                Image(systemName: "circle.inset.filled")
+            HStack(spacing: 4) {
+                Image(nsImage: TempoGlyph.menuBar)
                 Text(formatClock(pomodoro.remaining)).monospacedDigit()
             }
         case .rest:
@@ -158,7 +162,7 @@ struct PomodoroPanel: View {
 
             switch pomodoro.phase {
             case .idle:
-                TField(placeholder: "What are you working on?", text: $task, onSubmit: start)
+                TField(placeholder: "What are you working on?", text: $task, autofocus: true, onSubmit: start)
                 Button(action: start) {
                     HStack {
                         Image(systemName: "play.fill").font(.system(size: 10))

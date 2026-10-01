@@ -493,8 +493,11 @@ struct TField: View {
     let placeholder: String
     @Binding var text: String
     var mono = false
+    /// Focus the field whenever its window becomes key (e.g. each time the menu bar popover opens).
+    var autofocus = false
     var onSubmit: () -> Void = {}
     @FocusState private var focused: Bool
+    @State private var window: NSWindow?
 
     var body: some View {
         TextField("", text: $text, prompt: Text(placeholder).foregroundStyle(T.fg3))
@@ -508,6 +511,27 @@ struct TField: View {
             .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(focused ? T.fg2 : T.border))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(focused ? T.fg3.opacity(0.25) : .clear, lineWidth: 3).padding(-3))
             .onSubmit(onSubmit)
+            .background { if autofocus { WindowReader(window: $window) } }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+                guard autofocus, let window, note.object as? NSWindow === window else { return }
+                focused = true
+            }
+            .onAppear { if autofocus { DispatchQueue.main.async { focused = true } } }
+    }
+}
+
+/// Reports the NSWindow hosting a view.
+struct WindowReader: NSViewRepresentable {
+    @Binding var window: NSWindow?
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { window = view.window }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        if nsView.window !== window { DispatchQueue.main.async { window = nsView.window } }
     }
 }
 
@@ -618,14 +642,10 @@ struct ItemAvatar: View {
 struct TempoMark: View {
     var size: CGFloat = 18
     var body: some View {
-        ZStack {
-            Circle().fill(T.fg)
-            Circle().trim(from: 0, to: 0.72)
-                .stroke(T.inverted, style: StrokeStyle(lineWidth: size * 0.13, lineCap: .round))
-                .rotationEffect(.degrees(-90))
-                .padding(size * 0.24)
-        }
-        .frame(width: size, height: size)
+        RoundedRectangle(cornerRadius: size * 0.26, style: .continuous)
+            .fill(T.fg)
+            .overlay(TempoGlyphView().foregroundStyle(T.inverted).padding(size * 0.2))
+            .frame(width: size, height: size)
     }
 }
 
