@@ -2,6 +2,10 @@ import AppKit
 import SwiftUI
 import UserNotifications
 
+extension Notification.Name {
+    static let openDashboard = Notification.Name("TempoOpenDashboard")
+}
+
 @Observable
 final class AppModel {
     static let shared = AppModel()
@@ -43,6 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCent
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    /// Launching Tempo again (Finder, Spotlight, Dock) while it's running opens the dashboard,
+    /// so it's reachable even if the menu bar icon is hidden behind the notch.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        NotificationCenter.default.post(name: .openDashboard, object: nil)
+        return true
+    }
 
     // Show banners even while Tempo is frontmost.
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,

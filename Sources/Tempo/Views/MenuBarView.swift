@@ -2,8 +2,18 @@ import SwiftUI
 
 struct MenuBarLabel: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
+        // The label is always alive, so it's where app-level "open the dashboard" requests land.
+        content.onReceive(NotificationCenter.default.publisher(for: .openDashboard)) { _ in
+            openWindow(id: "dashboard")
+            NSApp.activate(ignoringOtherApps: true)
+        }
+    }
+
+    @ViewBuilder
+    private var content: some View {
         let pomodoro = model.pomodoro
         switch pomodoro.phase {
         case .idle:
@@ -12,16 +22,9 @@ struct MenuBarLabel: View {
             } else {
                 Image(nsImage: TempoGlyph.menuBar)
             }
-        case .focus:
-            HStack(spacing: 4) {
-                Image(nsImage: TempoGlyph.menuBar)
-                Text(formatClock(pomodoro.remaining)).monospacedDigit()
-            }
-        case .rest:
-            HStack(spacing: 3) {
-                Image(systemName: "cup.and.saucer")
-                Text(formatClock(pomodoro.remaining)).monospacedDigit()
-            }
+        case .focus, .rest:
+            Image(nsImage: TempoGlyph.progressImage(
+                remaining: pomodoro.remaining, fraction: 1 - pomodoro.progress, isBreak: pomodoro.phase == .rest))
         }
     }
 }
@@ -203,7 +206,8 @@ private struct TimerRing: View {
             }
         }
         .frame(width: diameter, height: diameter)
-        .animation(.linear(duration: 1), value: fraction)
+        // A short ease per tick rather than a continuous 1s animation keeps the popover idle between seconds.
+        .animation(.easeOut(duration: 0.25), value: fraction)
     }
 
     private func caption(for phase: Pomodoro.Phase) -> String {
