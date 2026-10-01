@@ -72,8 +72,10 @@ struct Config: Codable, Equatable {
     var idleThreshold: TimeInterval = 180
     var trackBrowserURLs = true
     var dailyPomodoroGoal = 8
-    /// Apps and sites excluded from all views, totals and scores.
-    var hidden: [ItemKey] = []
+    /// Apps and sites that are never recorded (and whose past records were deleted).
+    var ignored: [ItemKey] = []
+
+    private enum LegacyKeys: String, CodingKey { case hidden }
 
     init(categories: [Category], rules: [Rule]) {
         self.categories = categories
@@ -89,7 +91,8 @@ struct Config: Codable, Equatable {
         idleThreshold = try c.decodeIfPresent(TimeInterval.self, forKey: .idleThreshold) ?? 180
         trackBrowserURLs = try c.decodeIfPresent(Bool.self, forKey: .trackBrowserURLs) ?? true
         dailyPomodoroGoal = try c.decodeIfPresent(Int.self, forKey: .dailyPomodoroGoal) ?? 8
-        hidden = try c.decodeIfPresent([ItemKey].self, forKey: .hidden) ?? []
+        ignored = try c.decodeIfPresent([ItemKey].self, forKey: .ignored)
+            ?? decoder.container(keyedBy: LegacyKeys.self).decodeIfPresent([ItemKey].self, forKey: .hidden) ?? []
     }
 }
 

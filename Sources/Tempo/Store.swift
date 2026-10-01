@@ -205,16 +205,50 @@ final class Store {
         saveConfigIfNeeded()
     }
 
-    func hide(_ item: ItemKey) {
+    /// Total recorded time that `deleteAndIgnore` would remove for this item, across all days.
+    func recordedTime(for item: ItemKey) -> TimeInterval {
+        var probe = config
+        probe.ignored = [item]
+        let matcher = Categorizer(config: probe)
+        return allDayKeys().reduce(0) { total, key in
+            total + load(key).filter { matcher.isIgnored($0) }.reduce(0) { $0 + $1.duration }
+        }
+    }
+
+    /// Stops recording an app or site and permanently deletes everything already recorded for it.
+    @discardableResult
+    func deleteAndIgnore(_ item: ItemKey) -> TimeInterval {
+        breakContinuity()
         let key = ItemKey(kind: item.kind, value: item.value.lowercased())
-        guard !config.hidden.contains(key) else { return }
-        config.hidden.append(key)
+        if !config.ignored.contains(key) { config.ignored.append(key) }
+        saveConfigIfNeeded()
+
+        let matcher = categorizer
+        var removed: TimeInterval = 0
+        for dayKey in allDayKeys() {
+            let segments = load(dayKey)
+            let kept = segments.filter { !matcher.isIgnored($0) }
+            guard kept.count != segments.count else { continue }
+            removed += segments.filter { matcher.isIgnored($0) }.reduce(0) { $0 + $1.duration }
+            days[dayKey] = kept
+            dirtyDays.insert(dayKey)
+        }
+        summaryCache = [:]
+        sessionScoreCache = [:]
+        flush()
+        revision += 1
+        return removed
+    }
+
+    /// Starts recording an ignored item again (previously deleted time stays deleted).
+    func resumeTracking(_ item: ItemKey) {
+        config.ignored.removeAll { $0 == ItemKey(kind: item.kind, value: item.value.lowercased()) }
         saveConfigIfNeeded()
     }
 
-    func unhide(_ item: ItemKey) {
-        config.hidden.removeAll { $0 == ItemKey(kind: item.kind, value: item.value.lowercased()) }
-        saveConfigIfNeeded()
+    private func allDayKeys() -> Set<String> {
+        let files = (try? FileManager.default.contentsOfDirectory(atPath: directory.appendingPathComponent("activity").path)) ?? []
+        return Set(files.filter { $0.hasSuffix(".json") }.map { String($0.dropLast(5)) }).union(days.keys)
     }
 
     func deleteCategory(_ id: UUID) {

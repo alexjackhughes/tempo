@@ -649,23 +649,33 @@ struct AssignMenu: View {
     }
 }
 
-/// Small hover button that hides an app or site everywhere (with undo).
-struct HideButton: View {
+/// Hover button that permanently deletes an app or site's recorded time and stops recording it.
+struct DeleteItemButton: View {
     @Environment(AppModel.self) private var model
     let item: ItemKey
+    @State private var confirming = false
+    @State private var recorded: TimeInterval = 0
 
     var body: some View {
         Button {
-            let store = model.store
-            store.hide(item)
-            model.show(Toast(message: "Hidden \(item.value)",
-                             detail: "Excluded from all totals and scores. Unhide it under Categories.",
-                             undo: { [weak store] in store?.unhide(item) }))
+            recorded = model.store.recordedTime(for: item)
+            confirming = true
         } label: {
-            Image(systemName: "eye.slash").font(.system(size: 11))
+            Image(systemName: "trash").font(.system(size: 11))
         }
         .buttonStyle(TempoButtonStyle(kind: .ghost, height: 24))
-        .help("Hide \(item.value)")
+        .help("Delete \(item.value) and stop tracking it")
+        .alert("Delete \(item.value)?", isPresented: $confirming) {
+            Button("Delete and stop tracking", role: .destructive) {
+                let removed = model.store.deleteAndIgnore(item)
+                model.show(Toast(
+                    message: "Deleted \(item.value)",
+                    detail: "\(formatDuration(removed)) removed. It won't be recorded again."))
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This permanently deletes \(formatDuration(recorded)) of recorded time for \(item.value) across all days\(item.kind == .app ? ", including websites visited in it" : ""), and Tempo will never record it again.\n\nYou can resume tracking from Categories, but deleted time can't be restored.")
+        }
     }
 }
 

@@ -82,6 +82,10 @@ final class ActivityTracker {
 
         let name = app.localizedName ?? bundleID
         let domain = store.config.trackBrowserURLs ? browser.domain(for: bundleID) : nil
+        if store.categorizer.isIgnored(app: name, bundleID: bundleID, domain: domain) {
+            store.breakContinuity()
+            return
+        }
         store.record(app: name, bundleID: bundleID, domain: domain, at: now,
                      maxGap: Self.sampleInterval * 2.5)
     }

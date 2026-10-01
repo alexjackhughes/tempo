@@ -115,15 +115,38 @@ final class TempoTests: XCTestCase {
         XCTAssertEqual(store.categorizer.category(for: original)?.name, "Development")
     }
 
-    func testHiddenItemsAreExcludedFromTotals() {
+    func testDeleteAndIgnorePurgesHistoryAndStopsRecording() {
+        let yesterday = base.addingTimeInterval(-86_400)
+        for t in stride(from: 0.0, through: 60, by: 5) {
+            store.record(app: "Dia", bundleID: "dia", domain: "m.youtube.com", at: yesterday.addingTimeInterval(t), maxGap: 12.5)
+        }
+        store.breakContinuity()
         for t in stride(from: 0.0, through: 60, by: 5) { sample(t, "Xcode") }
         for t in stride(from: 65.0, through: 120, by: 5) { sample(t, "Safari", "youtube.com") }
         store.breakContinuity()
-        store.hide(ItemKey(kind: .domain, value: "youtube.com"))
-        let summary = store.summary(in: DateInterval(start: base, end: base.addingTimeInterval(120)))
-        XCTAssertEqual(summary.total, 65, accuracy: 0.1)
-        XCTAssertEqual(summary.score!, 100, accuracy: 0.1)
-        store.unhide(ItemKey(kind: .domain, value: "youtube.com"))
-        XCTAssertEqual(store.summary(in: DateInterval(start: base, end: base.addingTimeInterval(120))).total, 120, accuracy: 0.1)
+
+        let item = ItemKey(kind: .domain, value: "youtube.com")
+        XCTAssertEqual(store.recordedTime(for: item), 60 + 55, accuracy: 0.1)
+        XCTAssertEqual(store.deleteAndIgnore(item), 60 + 55, accuracy: 0.1)
+
+        // Gone from disk, not just from view.
+        let reloaded = Store(directory: directory)
+        XCTAssertTrue(reloaded.segments(on: yesterday).isEmpty)
+        XCTAssertEqual(reloaded.segments(on: base).map(\.domain), [nil])
+        XCTAssertTrue(reloaded.categorizer.isIgnored(app: "Arc", bundleID: "arc", domain: "music.youtube.com"))
+
+        // Resuming only affects the future.
+        reloaded.resumeTracking(item)
+        XCTAssertFalse(reloaded.categorizer.isIgnored(app: "Arc", bundleID: "arc", domain: "youtube.com"))
+        XCTAssertTrue(reloaded.segments(on: yesterday).isEmpty)
+    }
+
+    func testIgnoringAnAppCoversItsWebsites() {
+        let item = ItemKey(kind: .app, value: "Dia")
+        var config = store.config
+        config.ignored = [item]
+        let matcher = Categorizer(config: config)
+        XCTAssertTrue(matcher.isIgnored(app: "Dia", bundleID: "company.thebrowser.dia", domain: "github.com"))
+        XCTAssertFalse(matcher.isIgnored(app: "Safari", bundleID: "com.apple.Safari", domain: "github.com"))
     }
 }

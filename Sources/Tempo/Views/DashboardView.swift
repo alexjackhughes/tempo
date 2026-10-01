@@ -417,7 +417,7 @@ private struct ItemRowView: View {
                 .frame(width: 170, alignment: .leading)
             Text(formatDuration(item.seconds)).font(.mono(12)).foregroundStyle(T.fg)
                 .frame(width: 70, alignment: .trailing)
-            HideButton(item: item.key)
+            DeleteItemButton(item: item.key)
                 .opacity(hovering ? 1 : 0)
                 .frame(width: 28)
         }

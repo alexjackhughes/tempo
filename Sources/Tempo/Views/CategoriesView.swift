@@ -59,17 +59,18 @@ struct CategoriesView: View {
                     }
                 }
 
-                if !store.config.hidden.isEmpty {
-                    Panel(title: "Hidden", subtitle: "Excluded from all lists, totals and scores", padded: false) {
+                if !store.config.ignored.isEmpty {
+                    Panel(title: "Not tracked", subtitle: "Tempo never records these. Their past time was deleted.",
+                          padded: false) {
                         VStack(spacing: 0) {
-                            ForEach(store.config.hidden, id: \.self) { item in
+                            ForEach(store.config.ignored, id: \.self) { item in
                                 Hairline()
                                 HStack(spacing: 12) {
                                     ItemAvatar(key: item)
                                     Text(item.value).font(.geist(13, .medium)).foregroundStyle(T.fg)
                                     Text(item.kind == .domain ? "website" : "app").font(.mono(11)).foregroundStyle(T.fg3)
                                     Spacer()
-                                    Button("Unhide") { store.unhide(item) }
+                                    Button("Resume tracking") { store.resumeTracking(item) }
                                         .buttonStyle(TempoButtonStyle(kind: .secondary, height: 28))
                                 }
                                 .padding(.horizontal, 20)
