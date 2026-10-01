@@ -22,9 +22,16 @@ struct MenuBarLabel: View {
             } else {
                 Image(nsImage: TempoGlyph.menuBar)
             }
-        case .focus, .rest:
-            Image(nsImage: TempoGlyph.progressImage(
-                remaining: pomodoro.remaining, fraction: 1 - pomodoro.progress, isBreak: pomodoro.phase == .rest))
+        case .focus:
+            HStack(spacing: 4) {
+                Image(nsImage: TempoGlyph.menuBar)
+                Text(formatClock(pomodoro.remaining)).monospacedDigit()
+            }
+        case .rest:
+            HStack(spacing: 4) {
+                Image(systemName: "cup.and.saucer")
+                Text(formatClock(pomodoro.remaining)).monospacedDigit()
+            }
         }
     }
 }

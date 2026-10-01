@@ -28,10 +28,7 @@ final class SnapshotTests: XCTestCase {
         render(HStack(spacing: 14) {
             Image(systemName: "wifi"); Image(systemName: "battery.75")
             Image(nsImage: TempoGlyph.menuBar)
-            Image(nsImage: TempoGlyph.progressImage(remaining: 20 * 60, fraction: 1, isBreak: false))
-            Image(nsImage: TempoGlyph.progressImage(remaining: 12 * 60 + 5, fraction: 0.6, isBreak: false))
-            Image(nsImage: TempoGlyph.progressImage(remaining: 50, fraction: 0.05, isBreak: false))
-            Image(nsImage: TempoGlyph.progressImage(remaining: 3 * 60, fraction: 0.6, isBreak: true))
+            HStack(spacing: 4) { Image(nsImage: TempoGlyph.menuBar); Text("18:32").monospacedDigit() }
             Text("Thu 1 Oct 09:30")
         }.font(.system(size: 13)).foregroundStyle(.white).padding(.horizontal, 12)
             .frame(height: 24).background(Color(white: 0.15)), size: CGSize(width: 330, height: 24),

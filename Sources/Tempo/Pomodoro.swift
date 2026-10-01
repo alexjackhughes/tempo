@@ -17,6 +17,46 @@ final class Pomodoro {
 
     init(store: Store) {
         self.store = store
+        restore()
+    }
+
+    // MARK: Persistence — a running session survives quitting, crashes and updates.
+
+    private struct SavedState: Codable {
+        var phase: String
+        var start: Date
+        var end: Date
+        var task: String
+    }
+
+    private var stateURL: URL { store.directory.appendingPathComponent("active-session.json") }
+
+    private func persist() {
+        guard let startDate, let endDate, phase != .idle else {
+            try? FileManager.default.removeItem(at: stateURL)
+            return
+        }
+        let state = SavedState(phase: phase == .focus ? "focus" : "rest", start: startDate, end: endDate, task: task)
+        if let data = try? JSONEncoder().encode(state) { try? data.write(to: stateURL, options: .atomic) }
+    }
+
+    private func restore() {
+        guard let data = try? Data(contentsOf: stateURL),
+              let state = try? JSONDecoder().decode(SavedState.self, from: data) else { return }
+        phase = state.phase == "focus" ? .focus : .rest
+        startDate = state.start
+        endDate = state.end
+        task = state.task
+        startTimer()
+        tick() // completes the phase right away if it ended while Tempo wasn't running
+    }
+
+    private func startTimer() {
+        now = Date()
+        guard timer == nil else { return }
+        let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     var remaining: TimeInterval {
@@ -58,12 +98,8 @@ final class Pomodoro {
         self.phase = phase
         startDate = start
         endDate = start.addingTimeInterval(TimeInterval(minutes * 60))
-        now = start
-        if timer == nil {
-            let timer = Timer(timeInterval: 1, repeats: true) { [weak self] _ in self?.tick() }
-            RunLoop.main.add(timer, forMode: .common)
-            self.timer = timer
-        }
+        startTimer()
+        persist()
     }
 
     private func reset() {
@@ -72,6 +108,7 @@ final class Pomodoro {
         endDate = nil
         timer?.invalidate()
         timer = nil
+        persist()
     }
 
     private func tick() {

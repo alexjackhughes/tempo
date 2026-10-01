@@ -68,67 +68,6 @@ enum TempoGlyph {
     }
 
     static let menuBar = menuBarImage()
-
-    // MARK: Running-timer icon
-
-    private static var progressCache: [String: NSImage] = [:]
-
-    /// Fixed-width menu bar icon for a running timer: a ring showing time left with the minutes inside.
-    /// It stays the same width as the idle icon so it can't be pushed behind the notch.
-    static func progressImage(remaining: TimeInterval, fraction: Double, isBreak: Bool, height: CGFloat = 16) -> NSImage {
-        let minutes = max(0, Int((remaining / 60).rounded(.up)))
-        let step = Int((max(0, min(1, fraction)) * 60).rounded())
-        let key = "\(minutes)-\(step)-\(isBreak)"
-        if let cached = progressCache[key] { return cached }
-
-        let size = NSSize(width: height, height: height)
-        let image = NSImage(size: size, flipped: false) { rect in
-            let lineWidth: CGFloat = 1.6
-            let ringRect = rect.insetBy(dx: lineWidth / 2 + 0.5, dy: lineWidth / 2 + 0.5)
-            let center = NSPoint(x: ringRect.midX, y: ringRect.midY)
-            let radius = ringRect.width / 2
-
-            // Faint full track.
-            NSColor.black.withAlphaComponent(0.3).setStroke()
-            let track = NSBezierPath(ovalIn: ringRect)
-            track.lineWidth = lineWidth
-            track.stroke()
-
-            // Remaining time, clockwise from 12 o'clock.
-            if step > 0 {
-                let arc = NSBezierPath()
-                arc.appendArc(withCenter: center, radius: radius, startAngle: 90,
-                              endAngle: 90 - 360 * CGFloat(step) / 60, clockwise: true)
-                arc.lineWidth = lineWidth
-                arc.lineCapStyle = .round
-                NSColor.black.setStroke()
-                arc.stroke()
-            }
-
-            if isBreak {
-                let config = NSImage.SymbolConfiguration(pointSize: 7, weight: .bold)
-                if let cup = NSImage(systemSymbolName: "cup.and.saucer.fill", accessibilityDescription: nil)?
-                    .withSymbolConfiguration(config) {
-                    let s = cup.size
-                    cup.draw(in: NSRect(x: center.x - s.width / 2, y: center.y - s.height / 2,
-                                        width: s.width, height: s.height))
-                }
-            } else {
-                let text = "\(minutes)" as NSString
-                let font = NSFont.monospacedDigitSystemFont(ofSize: minutes >= 100 ? 6 : 8, weight: .bold)
-                let attrs: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.black]
-                let textSize = text.size(withAttributes: attrs)
-                text.draw(at: NSPoint(x: center.x - textSize.width / 2, y: center.y - textSize.height / 2),
-                          withAttributes: attrs)
-            }
-            return true
-        }
-        image.isTemplate = true
-        image.accessibilityDescription = isBreak ? "Tempo break, \(minutes) minutes left"
-                                                 : "Tempo focus, \(minutes) minutes left"
-        progressCache[key] = image
-        return image
-    }
 }
 
 struct TempoGlyphShape: Shape {

@@ -149,4 +149,15 @@ final class TempoTests: XCTestCase {
         XCTAssertTrue(matcher.isIgnored(app: "Dia", bundleID: "company.thebrowser.dia", domain: "github.com"))
         XCTAssertFalse(matcher.isIgnored(app: "Safari", bundleID: "com.apple.Safari", domain: "github.com"))
     }
+
+    func testRunningSessionSurvivesRestart() {
+        let pomodoro = Pomodoro(store: store)
+        pomodoro.startFocus(task: "Write tests")
+        let restored = Pomodoro(store: Store(directory: directory))
+        XCTAssertEqual(restored.phase, .focus)
+        XCTAssertEqual(restored.task, "Write tests")
+        XCTAssertEqual(restored.endDate, pomodoro.endDate)
+        restored.stop()
+        XCTAssertEqual(Pomodoro(store: Store(directory: directory)).phase, .idle)
+    }
 }
