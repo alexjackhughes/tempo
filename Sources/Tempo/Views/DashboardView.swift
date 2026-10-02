@@ -88,6 +88,19 @@ private struct DashboardHeader: View {
                     }
                 }
                 .buttonStyle(.primary)
+            case .breakReady:
+                HStack(spacing: 8) {
+                    StatusDot(color: T.green, size: 6)
+                    Text("Session complete").font(.geist(13, .medium)).foregroundStyle(T.fg)
+                    Button("Start break") { pomodoro.startBreak() }
+                        .buttonStyle(TempoButtonStyle(kind: .success, height: 26))
+                    Button("Skip") { pomodoro.skipBreak() }
+                        .buttonStyle(TempoButtonStyle(kind: .ghost, height: 26))
+                }
+                .padding(.leading, 12)
+                .padding(.trailing, 4)
+                .frame(height: 34)
+                .overlay(RoundedRectangle(cornerRadius: 17).strokeBorder(T.border))
             case .focus, .rest:
                 HStack(spacing: 8) {
                     StatusDot(color: pomodoro.phase == .focus ? T.blue : T.green, size: 6)

@@ -384,7 +384,7 @@ struct BarRow<Leading: View, Trailing: View>: View {
 // MARK: - Controls
 
 struct TempoButtonStyle: ButtonStyle {
-    enum Kind { case primary, secondary, ghost, danger }
+    enum Kind { case primary, success, secondary, ghost, danger }
     var kind: Kind = .secondary
     var height: CGFloat = 32
 
@@ -420,6 +420,7 @@ struct TempoButtonStyle: ButtonStyle {
         private var foreground: Color {
             switch kind {
             case .primary: T.inverted
+            case .success: .white
             case .danger: T.red
             case .secondary: T.fg
             case .ghost: hovering ? T.fg : T.fg2
@@ -429,6 +430,7 @@ struct TempoButtonStyle: ButtonStyle {
         private var background: Color {
             switch kind {
             case .primary: hovering ? T.fg.opacity(0.85) : T.fg
+            case .success: hovering ? T.green.opacity(0.85) : T.green
             case .secondary: hovering ? T.hover : T.surface
             case .ghost, .danger: hovering ? T.hover : .clear
             }

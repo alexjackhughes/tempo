@@ -160,4 +160,48 @@ final class TempoTests: XCTestCase {
         restored.stop()
         XCTAssertEqual(Pomodoro(store: Store(directory: directory)).phase, .idle)
     }
+
+    /// Simulates time passing by rewriting the saved state's end date, then reloading.
+    private func expireSavedPhase() {
+        let url = directory.appendingPathComponent("active-session.json")
+        var json = try! JSONSerialization.jsonObject(with: Data(contentsOf: url)) as! [String: Any]
+        json["end"] = Date().addingTimeInterval(-1).timeIntervalSinceReferenceDate
+        try! JSONSerialization.data(withJSONObject: json).write(to: url)
+    }
+
+    func testFocusCompletionWaitsForBreakAndNeedsAcknowledgement() {
+        Pomodoro(store: store).startFocus(task: "Ship it")
+        expireSavedPhase()
+
+        var p = Pomodoro(store: Store(directory: directory))
+        XCTAssertEqual(p.phase, .breakReady, "break must not start on its own")
+        XCTAssertTrue(p.needsAttention)
+        XCTAssertEqual(p.lastSession?.task, "Ship it")
+        XCTAssertEqual(Store(directory: directory).sessions.filter(\.completed).count, 1)
+
+        p.acknowledge()
+        XCTAssertFalse(Pomodoro(store: Store(directory: directory)).needsAttention, "acknowledgement persists")
+
+        p = Pomodoro(store: Store(directory: directory))
+        p.startBreak()
+        XCTAssertEqual(p.phase, .rest)
+        XCTAssertEqual(p.remaining, TimeInterval(store.config.breakMinutes * 60), accuracy: 2)
+        expireSavedPhase()
+
+        p = Pomodoro(store: Store(directory: directory))
+        XCTAssertEqual(p.phase, .idle)
+        XCTAssertTrue(p.needsAttention, "break ending is flagged in the menu bar")
+        p.acknowledge()
+        XCTAssertEqual(Pomodoro(store: Store(directory: directory)).phase, .idle)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: directory.appendingPathComponent("active-session.json").path))
+    }
+
+    func testSkippingPendingBreakReturnsToFocusTimer() {
+        Pomodoro(store: store).startFocus(task: "")
+        expireSavedPhase()
+        let p = Pomodoro(store: Store(directory: directory))
+        p.skipBreak()
+        XCTAssertEqual(p.phase, .idle)
+        XCTAssertFalse(p.needsAttention)
+    }
 }

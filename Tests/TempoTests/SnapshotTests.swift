@@ -46,6 +46,23 @@ final class SnapshotTests: XCTestCase {
         render(MenuBarView().environment(model), size: CGSize(width: 320, height: 430),
                appearance: .darkAqua, to: "\(out)/menubar-running.png")
         model.pomodoro.stop()
+        // Session just finished, waiting for the break to be started.
+        model.pomodoro.startFocus(task: "Auth refactor")
+        let stateURL = dir.appendingPathComponent("active-session.json")
+        var state = try! JSONSerialization.jsonObject(with: Data(contentsOf: stateURL)) as! [String: Any]
+        state["end"] = Date().addingTimeInterval(-1).timeIntervalSinceReferenceDate
+        try! JSONSerialization.data(withJSONObject: state).write(to: stateURL)
+        let doneModel = AppModel(store: Store(directory: dir))
+        for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+            render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 470),
+                   appearance: appearance, to: "\(out)/menubar-break-ready-\(suffix).png")
+        }
+        doneModel.pomodoro.startBreak()
+        render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 470),
+               appearance: .darkAqua, to: "\(out)/menubar-break-running.png")
+        doneModel.pomodoro.skipBreak()
+        model.pomodoro.skipBreak()
+
         render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),
                appearance: .darkAqua, to: "\(out)/focus-dark.png")
         render(page(NewCategoryForm(onCancel: {}, onCreate: { _ in }), model), size: CGSize(width: 1180, height: 320),

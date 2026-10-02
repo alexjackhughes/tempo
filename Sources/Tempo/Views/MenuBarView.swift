@@ -17,7 +17,13 @@ struct MenuBarLabel: View {
         let pomodoro = model.pomodoro
         switch pomodoro.phase {
         case .idle:
-            if model.store.trackingPaused {
+            if pomodoro.needsAttention {
+                // Break finished: stays until the popover is opened.
+                HStack(spacing: 4) {
+                    Image(systemName: "bell.fill")
+                    Text("Ready")
+                }
+            } else if model.store.trackingPaused {
                 Image(systemName: "pause.circle")
             } else {
                 Image(nsImage: TempoGlyph.menuBar)
@@ -26,6 +32,11 @@ struct MenuBarLabel: View {
             HStack(spacing: 4) {
                 Image(nsImage: TempoGlyph.menuBar)
                 Text(formatClock(pomodoro.remaining)).monospacedDigit()
+            }
+        case .breakReady:
+            HStack(spacing: 4) {
+                Image(systemName: pomodoro.needsAttention ? "checkmark.circle.fill" : "cup.and.saucer")
+                Text(pomodoro.needsAttention ? "Done" : "Break")
             }
         case .rest:
             HStack(spacing: 4) {
@@ -41,6 +52,7 @@ struct MenuBarView: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openWindow) private var openWindow
     @State private var task = ""
+    @State private var window: NSWindow?
 
     var body: some View {
         let pomodoro = model.pomodoro
@@ -52,21 +64,9 @@ struct MenuBarView: View {
             Hairline()
 
             VStack(spacing: 20) {
-                if pomodoro.phase == .idle {
-                    TField(placeholder: "What are you working on?", text: $task, autofocus: true, onSubmit: start)
-                } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Eyebrow(pomodoro.phase == .rest ? "Up next" : "Working on")
-                        Text(pomodoro.phase == .rest ? "Take a short break"
-                             : (pomodoro.task.isEmpty ? "Untitled session" : pomodoro.task))
-                            .font(.geist(14, .medium)).foregroundStyle(T.fg).lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
-                }
-
+                topSection(pomodoro)
                 TimerDial()
-
-                actionButton(pomodoro.phase)
+                actionButtons(pomodoro.phase)
             }
             .padding(20)
 
@@ -74,17 +74,69 @@ struct MenuBarView: View {
         }
         .frame(width: 320)
         .background(T.bg)
+        // Opening the popover acknowledges a finished session/break.
+        .background { WindowReader(window: $window) }
+        .onAppear { pomodoro.acknowledge() }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { note in
+            if let window, note.object as? NSWindow === window { pomodoro.acknowledge() }
+        }
+    }
+
+    @ViewBuilder
+    private func topSection(_ pomodoro: Pomodoro) -> some View {
+        switch pomodoro.phase {
+        case .idle:
+            TField(placeholder: "What are you working on?", text: $task, autofocus: true, onSubmit: primaryAction)
+        case .focus:
+            label(eyebrow: "Working on", text: pomodoro.task.isEmpty ? "Untitled session" : pomodoro.task)
+        case .breakReady:
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 28, height: 28)
+                    .background(T.green, in: Circle())
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Session complete").font(.geist(14, .semibold)).foregroundStyle(T.fg)
+                    Text(completedDetail(pomodoro))
+                        .font(.geist(12)).foregroundStyle(T.fg2).lineLimit(1)
+                }
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+        case .rest:
+            label(eyebrow: "Break", text: "Step away from the screen")
+        }
+    }
+
+    private func label(eyebrow: String, text: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Eyebrow(eyebrow)
+            Text(text).font(.geist(14, .medium)).foregroundStyle(T.fg).lineLimit(1)
+        }
+        .frame(maxWidth: .infinity, minHeight: 34, alignment: .leading)
+    }
+
+    private func completedDetail(_ pomodoro: Pomodoro) -> String {
+        let name = pomodoro.task.isEmpty ? "Focus session" : pomodoro.task
+        guard let session = pomodoro.lastSession, let score = model.store.score(for: session) else { return name }
+        return "\(name) · focus score \(Int(score.rounded()))"
     }
 
     private func header(_ phase: Pomodoro.Phase) -> some View {
-        HStack(spacing: 8) {
+        let (dot, text): (Color, String) = switch phase {
+        case .idle: (T.fg3, "Ready")
+        case .focus: (T.blue, "Focusing")
+        case .breakReady: (T.green, "Break time")
+        case .rest: (T.green, "On break")
+        }
+        return HStack(spacing: 8) {
             TempoMark(size: 18)
             Text("Tempo").font(.geist(13, .semibold)).foregroundStyle(T.fg)
             Spacer()
             HStack(spacing: 6) {
-                Circle().fill(phase == .focus ? T.blue : phase == .rest ? T.green : T.fg3).frame(width: 6, height: 6)
-                Text(phase == .focus ? "Focusing" : phase == .rest ? "On break" : "Ready")
-                    .font(.geist(12, .medium)).foregroundStyle(T.fg2)
+                Circle().fill(dot).frame(width: 6, height: 6)
+                Text(text).font(.geist(12, .medium)).foregroundStyle(T.fg2)
             }
             .padding(.horizontal, 8)
             .frame(height: 22)
@@ -114,10 +166,10 @@ struct MenuBarView: View {
     }
 
     @ViewBuilder
-    private func actionButton(_ phase: Pomodoro.Phase) -> some View {
+    private func actionButtons(_ phase: Pomodoro.Phase) -> some View {
         switch phase {
         case .idle:
-            Button(action: start) {
+            Button(action: primaryAction) {
                 HStack(spacing: 8) {
                     Image(systemName: "play.fill").font(.system(size: 10))
                     Text("Start focus")
@@ -136,11 +188,27 @@ struct MenuBarView: View {
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(TempoButtonStyle(kind: .secondary, height: 38))
+        case .breakReady:
+            VStack(spacing: 8) {
+                Button(action: primaryAction) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "cup.and.saucer.fill").font(.system(size: 11))
+                        Text("Start \(model.store.config.breakMinutes) min break")
+                        Spacer()
+                        Kbd("↩")
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(TempoButtonStyle(kind: .success, height: 38))
+                .keyboardShortcut(.defaultAction)
+                Button("Skip break") { model.pomodoro.skipBreak() }
+                    .buttonStyle(TempoButtonStyle(kind: .ghost, height: 26))
+            }
         case .rest:
             Button { model.pomodoro.skipBreak() } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "forward.end.fill").font(.system(size: 9))
-                    Text("Skip break")
+                    Text("End break early")
                 }
                 .frame(maxWidth: .infinity)
             }
@@ -182,10 +250,17 @@ struct MenuBarView: View {
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    private func start() {
-        guard model.pomodoro.phase == .idle else { return }
-        model.pomodoro.startFocus(task: task)
-        task = ""
+    /// Return key / main button: start focus when idle, start the break when one is waiting.
+    private func primaryAction() {
+        switch model.pomodoro.phase {
+        case .idle:
+            model.pomodoro.startFocus(task: task)
+            task = ""
+        case .breakReady:
+            model.pomodoro.startBreak()
+        case .focus, .rest:
+            break
+        }
     }
 }
 
@@ -196,10 +271,18 @@ private struct TimerDial: View {
     var body: some View {
         let pomodoro = model.pomodoro
         let phase = pomodoro.phase
-        let store = model.store
-        let seconds = phase == .idle ? TimeInterval(store.config.focusMinutes * 60) : pomodoro.remaining
+        let config = model.store.config
+        let seconds: TimeInterval = switch phase {
+        case .idle: TimeInterval(config.focusMinutes * 60)
+        case .breakReady: TimeInterval(config.breakMinutes * 60)
+        case .focus, .rest: pomodoro.remaining
+        }
         let litTicks = min(60, Int((seconds / 60).rounded(.up)))
-        let tint = phase == .rest ? T.green : phase == .focus ? T.fg : T.fg2
+        let tint: Color = switch phase {
+        case .idle: T.fg2
+        case .focus: T.fg
+        case .breakReady, .rest: T.green
+        }
 
         ZStack {
             Canvas { ctx, size in
@@ -215,12 +298,12 @@ private struct TimerDial: View {
             }
 
             VStack(spacing: 6) {
-                Eyebrow(phase == .focus ? "Focus" : phase == .rest ? "Break" : "Session")
+                Eyebrow(phase == .focus ? "Focus" : phase == .idle ? "Session" : "Break")
                 Text(formatClock(seconds))
                     .font(.geist(50, .medium))
                     .tracking(-2)
                     .monospacedDigit()
-                    .foregroundStyle(T.fg)
+                    .foregroundStyle(phase == .breakReady || phase == .rest ? T.green : T.fg)
                     .contentTransition(.numericText(countsDown: true))
                 Text(caption(phase))
                     .font(.mono(11))
@@ -251,6 +334,8 @@ private struct TimerDial: View {
             guard let start = pomodoro.startDate else { return "" }
             let score = model.store.summary(in: DateInterval(start: start, end: max(start, pomodoro.now))).score
             return score.map { "ends \(end) · score \(Int($0.rounded()))" } ?? "ends \(end)"
+        case .breakReady:
+            return "ready when you are"
         case .rest:
             return "back at \(end)"
         }
