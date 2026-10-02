@@ -39,10 +39,11 @@ codesign --force --sign - "$APP"
 echo "Built $APP"
 
 if [[ "${1:-}" == "--install" ]]; then
-    # Quit gracefully so Tempo flushes recent activity to disk; force-kill only as a fallback.
-    osascript -e 'quit app id "com.alexhughes.tempo"' 2>/dev/null || true
+    # SIGTERM makes Tempo save activity and the running session, then exit (normal Quit is
+    # intercepted so tracking keeps running). Force-kill only as a fallback.
+    pkill -TERM -x Tempo || true
     for _ in {1..20}; do pgrep -x Tempo >/dev/null || break; sleep 0.25; done
-    pkill -x Tempo || true
+    pkill -KILL -x Tempo || true
     rm -rf /Applications/Tempo.app
     cp -R "$APP" /Applications/
     open /Applications/Tempo.app

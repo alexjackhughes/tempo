@@ -49,8 +49,41 @@ final class AppModel {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate, UNUserNotificationCenterDelegate {
+    /// Set only by the explicit "Quit Tempo" command; ⌘Q and Dock → Quit just close the dashboard.
+    private static var quitRequested = false
+    private var termSource: DispatchSourceSignal?
+
+    static func quit() {
+        quitRequested = true
+        NSApp.terminate(nil)
+    }
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         Fonts.register()
+        // `kill`/installer updates: save activity and the running session before exiting.
+        signal(SIGTERM, SIG_IGN)
+        let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+        source.setEventHandler {
+            AppModel.shared.store.breakContinuity()
+            AppModel.shared.store.flush()
+            exit(0)
+        }
+        source.resume()
+        termSource = source
+    }
+
+    /// Tempo lives in the menu bar and should keep tracking. Quitting from the Dock or with ⌘Q
+    /// (while the dashboard is open) only closes the dashboard; logout, restart and shutdown still quit.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        let event = NSAppleEventManager.shared().currentAppleEvent
+        let isSystemQuit = event?.attributeDescriptor(forKeyword: kAEQuitReason) != nil
+        if Self.quitRequested || isSystemQuit { return .terminateNow }
+
+        for window in NSApp.windows where window.isVisible && window.level == .normal {
+            window.close()
+        }
+        NSApp.setActivationPolicy(.accessory)
+        return .terminateCancel
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {

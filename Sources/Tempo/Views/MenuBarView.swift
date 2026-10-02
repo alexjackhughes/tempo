@@ -96,7 +96,7 @@ struct MenuBarView: View {
                 }
                 Button("Open Tempo", action: openDashboard)
                 Divider()
-                Button("Quit Tempo") { NSApp.terminate(nil) }
+                Button("Quit Tempo (stops tracking)") { AppDelegate.quit() }
             } label: {
                 Image(systemName: "ellipsis").font(.system(size: 13, weight: .medium))
                     .foregroundStyle(T.fg2)
