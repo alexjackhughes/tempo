@@ -220,7 +220,8 @@ struct MenuBarView: View {
         HStack(spacing: 10) {
             Text("Today").font(.geist(12)).foregroundStyle(T.fg2)
             HStack(spacing: 3) {
-                ForEach(0..<max(goal, done), id: \.self) { i in
+                // One square per goal session; going over the goal shows in the count, not more squares.
+                ForEach(0..<goal, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 2)
                         .fill(i < done ? T.fg : T.fill)
                         .frame(width: 8, height: 8)
@@ -235,6 +236,7 @@ struct MenuBarView: View {
                 }
             }
             .buttonStyle(TempoButtonStyle(kind: .ghost, height: 28))
+            .fixedSize()
             .keyboardShortcut("d")
             .help("Open Tempo (⌘D)")
         }

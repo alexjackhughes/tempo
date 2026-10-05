@@ -1,6 +1,8 @@
 #!/bin/bash
 # Builds Tempo.app into ./build. Pass --install to copy it into /Applications and launch it.
+# Set TEMPO_BUNDLE_ID to use your own bundle identifier (e.g. com.yourname.tempo).
 set -euo pipefail
+BUNDLE_ID="${TEMPO_BUNDLE_ID:-com.alexhughes.tempo}"
 
 cd "$(dirname "$0")/.."
 APP="build/Tempo.app"
@@ -20,7 +22,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <dict>
     <key>CFBundleName</key><string>Tempo</string>
     <key>CFBundleDisplayName</key><string>Tempo</string>
-    <key>CFBundleIdentifier</key><string>com.alexhughes.tempo</string>
+    <key>CFBundleIdentifier</key><string>__BUNDLE_ID__</string>
     <key>CFBundleExecutable</key><string>Tempo</string>
     <key>CFBundleIconFile</key><string>AppIcon</string>
     <key>CFBundlePackageType</key><string>APPL</string>
@@ -34,6 +36,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 </dict>
 </plist>
 PLIST
+sed -i '' "s/__BUNDLE_ID__/$BUNDLE_ID/" "$APP/Contents/Info.plist"
 
 codesign --force --sign - "$APP"
 echo "Built $APP"

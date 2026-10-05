@@ -35,15 +35,15 @@ final class SnapshotTests: XCTestCase {
                appearance: .darkAqua, to: "\(out)/menubar-strip.png")
 
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            render(MenuBarView().environment(model), size: CGSize(width: 320, height: 430),
+            render(MenuBarView().environment(model), size: CGSize(width: 320, height: 0),
                    appearance: appearance, to: "\(out)/menubar-\(suffix).png")
-            render(page(DayView(), model), size: CGSize(width: 1180, height: 1650),
+            render(page(DayView(), model), size: CGSize(width: 1180, height: 0),
                    appearance: appearance, to: "\(out)/overview-\(suffix).png")
-            render(page(TrendsView(), model), size: CGSize(width: 1180, height: 1000),
+            render(page(TrendsView(), model), size: CGSize(width: 1180, height: 0),
                    appearance: appearance, to: "\(out)/trends-\(suffix).png")
         }
         model.pomodoro.startFocus(task: "Auth refactor")
-        render(MenuBarView().environment(model), size: CGSize(width: 320, height: 430),
+        render(MenuBarView().environment(model), size: CGSize(width: 320, height: 0),
                appearance: .darkAqua, to: "\(out)/menubar-running.png")
         model.pomodoro.stop()
         // Session just finished, waiting for the break to be started.
@@ -54,22 +54,22 @@ final class SnapshotTests: XCTestCase {
         try! JSONSerialization.data(withJSONObject: state).write(to: stateURL)
         let doneModel = AppModel(store: Store(directory: dir))
         for (suffix, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
-            render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 470),
+            render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 0),
                    appearance: appearance, to: "\(out)/menubar-break-ready-\(suffix).png")
         }
         doneModel.pomodoro.startBreak()
-        render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 470),
+        render(MenuBarView().environment(doneModel), size: CGSize(width: 320, height: 0),
                appearance: .darkAqua, to: "\(out)/menubar-break-running.png")
         doneModel.pomodoro.skipBreak()
         model.pomodoro.skipBreak()
 
-        render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 1300),
+        render(page(PomodorosView(), model), size: CGSize(width: 1180, height: 0),
                appearance: .darkAqua, to: "\(out)/focus-dark.png")
-        render(page(NewCategoryForm(onCancel: {}, onCreate: { _ in }), model), size: CGSize(width: 1180, height: 320),
+        render(page(NewCategoryForm(onCancel: {}, onCreate: { _ in }), model), size: CGSize(width: 1180, height: 0),
                appearance: .aqua, to: "\(out)/new-category.png")
-        render(page(CategoriesView(), model), size: CGSize(width: 1180, height: 1400),
+        render(page(CategoriesView(), model), size: CGSize(width: 1180, height: 0),
                appearance: .aqua, to: "\(out)/categories-light.png")
-        render(page(SettingsView(), model), size: CGSize(width: 1180, height: 1500),
+        render(page(SettingsView(), model), size: CGSize(width: 1180, height: 0),
                appearance: .aqua, to: "\(out)/settings-light.png")
     }
 
@@ -77,7 +77,7 @@ final class SnapshotTests: XCTestCase {
         content
             .frame(maxWidth: 1120)
             .padding(32)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+            .frame(maxWidth: .infinity, alignment: .top)
             .background(T.bg)
             .environment(model)
     }
@@ -122,7 +122,14 @@ final class SnapshotTests: XCTestCase {
     }
 
     @MainActor
+    /// Pass a height of 0 to size the image to the content.
     private func render<V: View>(_ view: V, size: CGSize, appearance: NSAppearance.Name, to path: String) {
+        var size = size
+        if size.height == 0 {
+            let probe = NSHostingView(rootView: view.frame(width: size.width))
+            probe.appearance = NSAppearance(named: appearance)
+            size.height = ceil(probe.fittingSize.height)
+        }
         let host = NSHostingView(rootView: view.frame(width: size.width, height: size.height))
         host.frame = CGRect(origin: .zero, size: size)
         let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
